@@ -13,7 +13,7 @@ describe("GFSIS_SUBDOMAIN", () => {
 import {
   descartarPassados,
   filtrarPorPeriodo,
-  montarRespostaOpcoes,
+  mensagemOpcoes,
   periodoDoHorario,
   planejarDias,
   selecionarOpcoes,
@@ -131,17 +131,8 @@ describe("opções numeradas", () => {
     expect(selecionarOpcoes([], 6)).toEqual([]);
   });
 
-  it("monta campos planos e texto pronto para o retorno livre da Suri", () => {
-    const opcoes = selecionarOpcoes([{ data: "2026-09-15", horarios: ["09:00", "10:30", "14:00"] }], 6);
-    const data = montarRespostaOpcoes(opcoes);
-    expect(data.quantidade).toBe(3);
-    expect(data.texto).toBe(
-      "1) 15/09 (Terça) 09:00\n2) 15/09 (Terça) 10:30\n3) 15/09 (Terça) 14:00\n\nResponda com o número da opção.",
-    );
-    expect(data.opcao2_data).toBe("2026-09-15");
-    expect(data.opcao2_horario).toBe("10:30");
-    expect(data.opcao3_label).toBe("15/09 (Terça) 14:00");
-    expect(data.opcao4_data).toBeUndefined();
-    expect(Array.isArray(data.opcoes)).toBe(true);
+  it("monta a mensagem curta com a quantidade", () => {
+    expect(mensagemOpcoes(6)).toBe("Encontrei 6 horários");
+    expect(mensagemOpcoes(1)).toBe("Encontrei 1 horário");
   });
 });

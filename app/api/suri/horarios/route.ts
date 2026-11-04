@@ -1,6 +1,7 @@
 /**
  * Etapas 5–6 — consulta horários disponíveis nos próximos dias de atendimento,
- * filtra pelo período e devolve opções numeradas + campos planos para a Suri.
+ * filtra pelo período e devolve só o necessário: message ("Encontrei N horários")
+ * e data.opcoes, limitada a maxOpcoes.
  */
 import { z } from "zod";
 import { resolverPontoAtendimento } from "@/lib/env";
@@ -11,10 +12,10 @@ import {
   descartarPassados,
   filtrarPorPeriodo,
   mapWithConcurrency,
-  montarRespostaOpcoes,
   PERIODO_LABEL,
   planejarDias,
   selecionarOpcoes,
+  mensagemOpcoes,
   type Periodo,
   type SlotsDia,
 } from "@/lib/horarios";
@@ -129,14 +130,12 @@ export const POST = suriHandler("/api/suri/horarios", schema, async (input, ctx)
     const r = failure(
       "SEM_HORARIOS",
       `Não encontrei horários disponíveis no período da ${PERIODO_LABEL[periodo]} nos próximos dias. Quer tentar outro período (${outros.join(" ou ")})?`,
-      { quantidade: 0, texto: "", periodo, diasConsultados: datas.join(",") },
+      { opcoes: [] },
     );
     return erroValidacao ? { ...r, errorLog: erroValidacao } : r;
   }
 
-  const result = success(
-    `Encontrei ${opcoes.length} ${opcoes.length === 1 ? "horário" : "horários"}`,
-    { ...montarRespostaOpcoes(opcoes), periodo, diasConsultados: datas.join(",") },
-  );
+  // Retorno enxuto: message curta + data.opcoes (no máximo maxOpcoes itens).
+  const result = success(mensagemOpcoes(opcoes.length), { opcoes });
   return falhaParcial ? { ...result, errorLog: falhaParcial } : result;
 });

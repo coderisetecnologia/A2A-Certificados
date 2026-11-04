@@ -2,7 +2,7 @@
 
 API em Next.js (App Router, TypeScript) hospedada na Vercel que conecta os fluxos da **Suri** ao **GFSIS**. Ela cuida do atendimento e do agendamento de reuniões. Inclui um painel web, protegido por login Google, para consultar os erros da integração.
 
-> Escopo: apenas atendimento e agendamento. Pedidos, certificados e boletos **não** fazem parte desta API.
+> Escopo: atendimento e agendamento, mais as **consultas complementares** (somente leitura): próximo agendamento, nota fiscal, boletos em aberto e situação de pedido. Emissão de pedidos e certificados **não** faz parte desta API.
 
 ## Sumário
 
@@ -45,6 +45,8 @@ Vercel Cron ──Bearer CRON_SECRET──▶ /api/cron/cleanup (apaga erros > 9
 | `lib/suri-handler.ts` | Wrapper das rotas: API key, correlation_id, zod, orçamento de tempo e log de erros |
 | `lib/horarios.ts`, `lib/time.ts` | Filtro por período e cálculos no fuso do negócio |
 | `lib/cliente.ts`, `lib/viacep.ts` | Mescla de cadastro, campos faltantes e ViaCEP |
+| `lib/documento.ts` | Identificação e validação de CPF ou CNPJ (inclusive alfanumérico) |
+| `lib/consultas.ts` | Campos planos e textos prontos das consultas complementares |
 | `lib/mask.ts`, `lib/cpf.ts`, `lib/normalize.ts` | Máscaras (LGPD), CPF e normalização |
 | `lib/db.ts`, `scripts/migrate.ts` | Neon e migration |
 
@@ -81,11 +83,17 @@ Todas as rotas da Suri são `POST` com JSON, header `x-api-key` e prefixo `/api/
 
 | Endpoint | Etapa | Resumo |
 |---|---|---|
-| `POST /api/suri/cliente/consultar` | 3 | `{cpf}` → `encontrado`, `primeiroNome`, `emailMascarado`, `telefoneMascarado`, `cadastroCompleto`, `camposFaltantes` |
+| `POST /api/suri/cliente/consultar` | 3 | `{documento}` (CPF ou CNPJ; também aceita `cpf` ou `cnpj`) → `encontrado`, `tipoDocumento`, `primeiroNome`, `emailMascarado`, `telefoneMascarado`, `cadastroCompleto`, `camposFaltantes` |
 | `POST /api/suri/cliente/salvar` | 4 | Cadastra ou atualiza o cliente. Mescla com o cadastro existente e completa o endereço via ViaCEP. |
-| `POST /api/suri/horarios` | 5–6 | `{periodo, dataInicial?, dias?, maxOpcoes?}` → opções numeradas e texto pronto |
+| `POST /api/suri/horarios` | 5–6 | `{periodo, dataInicial?, dias?, maxOpcoes?}` → `message` ("Encontrei N horários") e `data.opcoes` (até `maxOpcoes`) |
 | `POST /api/suri/agendar` | 7–8 | `{data, horario, cliente{...}, videoconferencia?, observacao?}` → confirmação pronta |
+| `POST /api/suri/agendamento/proximo` | Complementar | `{documento}` → próximo agendamento futuro e `mensagemAgendamento` pronta |
+| `POST /api/suri/nota-fiscal` | Complementar | `{documento}` → links das notas fiscais (`nota1_link`…) e `texto` pronto |
+| `POST /api/suri/boletos` | Complementar | `{documento, qtdBoletos?}` → links dos boletos em aberto (`boleto1_link`…) e `texto` pronto |
+| `POST /api/suri/pedido/situacao` | Complementar | `{numeroPedido?, documento?, identificadorUnidade?}` → situação do pedido (ou do último pedido do documento) e `mensagemPedido` |
 | `GET /api/suri/health` | — | Healthcheck sem chamar o GFSIS (não exige API key) |
+
+`documento` aceita CPF ou CNPJ, com ou sem máscara, inclusive o CNPJ alfanumérico. A API identifica o tipo pelo tamanho (11 ou 14 caracteres).
 
 **Status HTTP:** é sempre `200` para resultados de negócio, inclusive `ok:false`. `401` só aparece com API key inválida. `500` só aparece em falha inesperada nossa ou configuração ausente.
 
@@ -97,7 +105,13 @@ Todas as rotas da Suri são `POST` com JSON, header `x-api-key` e prefixo `/api/
 | `CLIENTE_NAO_ENCONTRADO` | ✔ | CPF sem cadastro (`encontrado:false`) | não |
 | `JA_AGENDADO` | ✔ | Já existe agendamento igual | não |
 | `CLIENTE_JA_CADASTRADO` | ✔ | GFSIS recusou a atualização com o código 003 | sim |
-| `CPF_INVALIDO` | ✖ | CPF digitado inválido | não |
+| `SEM_AGENDAMENTO` | ✔ | Cliente sem agendamento futuro | não |
+| `SEM_NOTA_FISCAL`, `NOTA_FISCAL_NAO_GERADA` | ✔ | Sem nota vinculada / nota ainda não emitida | não |
+| `SEM_BOLETOS` | ✔ | Nenhum boleto em aberto | não |
+| `SEM_PEDIDO` | ✔ | Documento sem nenhum pedido | não |
+| `CPF_INVALIDO`, `CNPJ_INVALIDO` | ✖ | Documento digitado inválido | não |
+| `PEDIDO_NAO_ENCONTRADO`, `PEDIDO_INVALIDO` | ✖ | Número de pedido inexistente, de outro documento ou mal digitado | não |
+| `GFSIS_ERRO_CONSULTA` | ✖ | Resposta inesperada do GFSIS numa consulta complementar: transferir para humano | sim |
 | `EMAIL_INVALIDO`, `TELEFONE_INVALIDO`, `DATA_NASCIMENTO_INVALIDA`, `CEP_INVALIDO` | ✖ | Formato digitado inválido | não |
 | `ENDERECO_INCOMPLETO` | ✖ | CEP geral da cidade, sem rua ou bairro (em `/agendar`, também quando falta o endereço) | só em `/agendar` |
 | `DATA_NASCIMENTO_OBRIGATORIA`, `EMAIL_OBRIGATORIO`, `NOME_OBRIGATORIO`, `ENDERECO_INVALIDO`, `CPF_OBRIGATORIO` | ✖ | Validação do GFSIS ou dado ausente: pedir o dado de novo | sim |
@@ -158,6 +172,7 @@ Veja [.env.example](.env.example). Resumo:
 | `GFSIS_SUBDOMAIN` | ✔ | Subdomínio do GFSIS |
 | `GFSIS_USER` / `GFSIS_PASSWORD` | ✔ | Usuário integração |
 | `GFSIS_PONTO_ATENDIMENTO_ID` | — | Ponto de atendimento padrão. Só é usado em horários e agendamento (pode ser sobrescrito no body). Sem ele, essas duas rotas exigem `identificadorPontoAtendimento` no body |
+| `GFSIS_UNIDADE_ID` | — | Unidade (`identificadorUnidade`) da consulta de pedido por número. Sem ela, usa `GFSIS_PONTO_ATENDIMENTO_ID` (pode ser sobrescrita no body) |
 | `SURI_API_KEY` | ✔ | Chave do header `x-api-key` (`openssl rand -hex 32`) |
 | `DATABASE_URL` | ✔ | Neon (pooled) |
 | `AUTH_SECRET` | ✔ | Segredo do Auth.js |
@@ -234,11 +249,15 @@ A documentação oficial (<https://gfsis.readme.io>) traz exemplos conflitantes.
 | `POST /auth` | Corpo JSON `{username,password}` **e** header `Basic`. Resposta `{token, expiresIn}` **ou** `{accessToken, expirationDate}`. Sem `expiresIn`, a validade vem do `exp` do JWT, limitada a 1h. |
 | `GET /ConsultaHorarioAgenda` | `horariosDisponiveis` **ou** `listaHorarios`. Sem horários, vem `{mensagem}` com HTTP 200. |
 | `POST /Agendamento` | `idAgendamento` **ou** `id`. Data `yyyy-MM-dd` **ou** `dd/MM/yyyy`. |
-| Próximo agendamento | `GET /ConsultaAgendamentoCliente?cpf=` (apenas dígitos) |
+| Próximo agendamento | `GET /ConsultaAgendamentoCliente?cpf=` ou `?cnpj=` (apenas dígitos) |
+| CPF/CNPJ como parâmetro | A documentação descreve como query **e** como path (com aspas). Enviamos como query, sem aspas, igual às rotas de cliente. |
+| `GET /ConsultaNotaFiscal` e `GET /ConsultaBoletosEmitidos` | Lista `[{linkNotaFiscal}]` / `[{linkBoleto}]`. Sem resultado, vem HTTP 200 `{success:true, code:"002"\|"003", message}`. O exemplo traz link terminado em `;`, que é removido. |
+| `GET /ConsultaPedidoVendaLTS` | A documentação mostra `identificadorPedido` e `identificadorUnidade` num corpo JSON de um GET. O `fetch` não envia corpo em GET, então vão como query string. Não encontrado vem como `{success:true, code:"002"}`. |
+| `GET /ConsultaUltimoPedidoCliente` | Sem pedido vem `{status:"error", message:"Cliente não possui nenhum pedido"}` com HTTP 500 |
 | `GET /ConsultaCliente` | Telefone como `"Celular: 37..."` e `dataNascimento` como `dd-MM-yyyy` |
 | `POST /Cliente` | Erros como `{erro, codigo, mensagem}` **ou** `{erros:[{codigo, mensagem}]}`. O código `003` ("já existe cliente com o CPF") vira `CLIENTE_JA_CADASTRADO` com `ok:true` e é registrado para conferência. |
 
-> ⚠️ **Validar em homologação:** o formato exato da autenticação e o comportamento de `POST /Cliente` para um CPF já existente (atualiza ou retorna `003`) precisam ser confirmados com uma chamada real. Use o botão de teste do painel e confira `error_logs` nos primeiros atendimentos.
+> ⚠️ **Validar em homologação:** o formato exato da autenticação, o comportamento de `POST /Cliente` para um CPF já existente (atualiza ou retorna `003`) e o envio por query string em `ConsultaPedidoVendaLTS` precisam ser confirmados com uma chamada real. Use o botão de teste do painel e confira `error_logs` nos primeiros atendimentos.
 #   A 2 A - C e r t i f i c a d o s  
  #   A 2 A - C e r t i f i c a d o s  
  

@@ -79,6 +79,55 @@ curl -s -X POST "$BASE_URL/api/suri/agendar" \
   }'
 ```
 
+## Etapa 3 com CNPJ
+
+O campo `documento` aceita CPF ou CNPJ (também valem `cpf` ou `cnpj`):
+
+```bash
+curl -s -X POST "$BASE_URL/api/suri/cliente/consultar" \
+  -H "x-api-key: $SURI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"documento":"11.222.333/0001-81"}'
+```
+
+## Fluxos complementares
+
+Próximo agendamento:
+
+```bash
+curl -s -X POST "$BASE_URL/api/suri/agendamento/proximo" \
+  -H "x-api-key: $SURI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"documento":"52998224725"}'
+```
+
+Nota fiscal:
+
+```bash
+curl -s -X POST "$BASE_URL/api/suri/nota-fiscal" \
+  -H "x-api-key: $SURI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"documento":"52998224725"}'
+```
+
+Boletos em aberto:
+
+```bash
+curl -s -X POST "$BASE_URL/api/suri/boletos" \
+  -H "x-api-key: $SURI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"documento":"52998224725","qtdBoletos":5}'
+```
+
+Situação de um pedido (pelo número; sem `numeroPedido`, devolve o último pedido do documento):
+
+```bash
+curl -s -X POST "$BASE_URL/api/suri/pedido/situacao" \
+  -H "x-api-key: $SURI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"documento":"52998224725","numeroPedido":"12345"}'
+```
+
 ## Sem API key (espera 401)
 
 ```bash

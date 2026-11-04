@@ -3,7 +3,16 @@
 import { useState } from "react";
 import { Badge, btnPrimary, btnSecondary, card, CodeBlock, inputCls } from "../ui";
 
-type Rota = "health" | "cliente/consultar" | "cliente/salvar" | "horarios" | "agendar";
+type Rota =
+  | "health"
+  | "cliente/consultar"
+  | "cliente/salvar"
+  | "horarios"
+  | "agendar"
+  | "agendamento/proximo"
+  | "nota-fiscal"
+  | "boletos"
+  | "pedido/situacao";
 
 interface Resultado {
   ok: boolean;
@@ -43,8 +52,9 @@ const TESTES: Teste[] = [
     rota: "cliente/consultar",
     titulo: "Consultar cliente",
     etapa: "Etapa 3",
-    descricao: "Busca o cliente no GFSIS pelo CPF e informa quais dados faltam no cadastro. Somente leitura.",
-    exemplo: (cpf) => ({ cpf }),
+    descricao:
+      "Busca o cliente no GFSIS pelo CPF ou CNPJ (campo documento) e informa quais dados faltam no cadastro. Também aceita os campos cpf ou cnpj. Somente leitura.",
+    exemplo: (doc) => ({ documento: doc }),
   },
   {
     rota: "cliente/salvar",
@@ -87,6 +97,38 @@ const TESTES: Teste[] = [
       observacao: "Teste pelo painel (pode cancelar)",
     }),
   },
+  {
+    rota: "agendamento/proximo",
+    titulo: "Próximo agendamento do cliente",
+    etapa: "Complementar",
+    descricao:
+      "Consulta o próximo agendamento futuro (não cancelado) do cliente pelo CPF ou CNPJ. Sem agendamento, responde SEM_AGENDAMENTO. Somente leitura.",
+    exemplo: (doc) => ({ documento: doc }),
+  },
+  {
+    rota: "nota-fiscal",
+    titulo: "Nota fiscal por cliente",
+    etapa: "Complementar",
+    descricao:
+      "Devolve os links das notas fiscais do cliente (CPF ou CNPJ). Responde NOTA_FISCAL_NAO_GERADA ou SEM_NOTA_FISCAL quando não há nota. Somente leitura.",
+    exemplo: (doc) => ({ documento: doc }),
+  },
+  {
+    rota: "boletos",
+    titulo: "Boletos em aberto por cliente",
+    etapa: "Complementar",
+    descricao:
+      "Devolve os links dos boletos emitidos e em aberto do cliente (CPF ou CNPJ). qtdBoletos é opcional (padrão 5, máx. 9). Somente leitura.",
+    exemplo: (doc) => ({ documento: doc, qtdBoletos: 5 }),
+  },
+  {
+    rota: "pedido/situacao",
+    titulo: "Situação de um pedido",
+    etapa: "Complementar",
+    descricao:
+      "Com numeroPedido, consulta a situação desse pedido (se o documento também vier, confere se o pedido é dele). Só com o documento, mostra o último pedido do cliente. identificadorUnidade é opcional (padrão: GFSIS_UNIDADE_ID ou ponto padrão). Somente leitura.",
+    exemplo: (doc) => ({ documento: doc, numeroPedido: "" }),
+  },
 ];
 
 const fmt = (v: unknown) => (v === null || v === undefined ? "" : JSON.stringify(v, null, 2));
@@ -123,6 +165,7 @@ export function Testes({
           const obj = JSON.parse(atual[t.rota] || "null") as Record<string, unknown> | null;
           if (!obj || typeof obj !== "object") continue;
           if ("cpf" in obj) obj.cpf = cpf;
+          if ("documento" in obj) obj.documento = cpf;
           if (obj.cliente && typeof obj.cliente === "object") (obj.cliente as Record<string, unknown>).cpf = cpf;
           novo[t.rota] = fmt(obj);
         } catch {
@@ -213,17 +256,17 @@ export function Testes({
         )}
         <div className="flex flex-wrap items-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
           <div className="flex-1">
-            <label htmlFor="cpf" className="mb-1 block text-sm font-medium">CPF de teste</label>
+            <label htmlFor="cpf" className="mb-1 block text-sm font-medium">CPF ou CNPJ de teste</label>
             <input
               id="cpf"
               className={inputCls}
-              placeholder="000.000.000-00"
+              placeholder="000.000.000-00 ou 00.000.000/0000-00"
               value={cpf}
               onChange={(e) => setCpf(e.target.value)}
             />
           </div>
           <button type="button" className={btnSecondary} onClick={aplicarCpf} disabled={!cpf.trim()}>
-            Aplicar CPF em todos os testes
+            Aplicar em todos os testes
           </button>
         </div>
       </section>

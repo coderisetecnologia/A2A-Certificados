@@ -26,7 +26,7 @@ Toda resposta tem o formato:
 
 ### Como mapear o retorno livre
 
-Ao configurar o retorno da requisição, mapeie os campos de `data` para variáveis do flow. Os campos foram pensados para serem **planos**, sem precisar iterar arrays: `data.primeiroNome`, `data.texto`, `data.opcao1_data` etc.
+Ao configurar o retorno da requisição, mapeie os campos de `data` para variáveis do flow. A maioria dos campos é **plana** (`data.primeiroNome`, `data.texto` etc.). A exceção é `/horarios`, que devolve só a lista `data.opcoes`.
 
 > ⚠️ **conferir:** a forma exata de referenciar o JSON da resposta (ex.: `data.primeiroNome`, `$.data.primeiroNome` ou `response.data.primeiroNome`) depende da versão do editor de flows da Suri. Confira no campo de mapeamento da ação.
 
@@ -57,9 +57,15 @@ Body:
 
 ```json
 {
-  "cpf": "@User.IdentificationDocument"
+  "documento": "@User.IdentificationDocument"
 }
 ```
+
+- `documento` aceita **CPF ou CNPJ**, com ou sem máscara (inclusive o CNPJ alfanumérico). A API identifica o tipo pelo tamanho.
+- Também aceita os campos `cpf` ou `cnpj` no lugar de `documento`. Corpos antigos com `{"cpf": ...}` continuam funcionando.
+- Para CNPJ, a data de nascimento não é exigida, e `primeiroNome` traz a razão social completa.
+- A resposta inclui `data.tipoDocumento` (`cpf` ou `cnpj`) e `data.pessoaFisica`.
+- CNPJ inválido responde `CNPJ_INVALIDO`.
 
 Resposta (cliente encontrado):
 
@@ -227,33 +233,29 @@ Resposta:
   "code": "OK",
   "message": "Encontrei 3 horários",
   "data": {
-    "quantidade": 3,
-    "texto": "1) 16/09 (Quarta) 09:00\n2) 16/09 (Quarta) 10:30\n3) 17/09 (Quinta) 09:00\n\nResponda com o número da opção.",
-    "opcao1_data": "2026-09-16", "opcao1_horario": "09:00", "opcao1_label": "16/09 (Quarta) 09:00",
-    "opcao2_data": "2026-09-16", "opcao2_horario": "10:30", "opcao2_label": "16/09 (Quarta) 10:30",
-    "opcao3_data": "2026-09-17", "opcao3_horario": "09:00", "opcao3_label": "17/09 (Quinta) 09:00",
-    "opcoes": [ { "numero": 1, "data": "2026-09-16", "horario": "09:00", "label": "16/09 (Quarta) 09:00" } ],
-    "periodo": "manha",
-    "diasConsultados": "2026-09-16,2026-09-17,2026-09-18,2026-09-21,2026-09-22"
+    "opcoes": [
+      { "numero": 1, "data": "2026-09-16", "horario": "09:00", "label": "16/09 (Quarta) 09:00" },
+      { "numero": 2, "data": "2026-09-16", "horario": "10:30", "label": "16/09 (Quarta) 10:30" },
+      { "numero": 3, "data": "2026-09-17", "horario": "09:00", "label": "17/09 (Quinta) 09:00" }
+    ]
   }
 }
 ```
+
+O retorno traz só o necessário: `message` com a quantidade ("Encontrei N horários") e `data.opcoes`, com no máximo `maxOpcoes` itens.
 
 **Mapeamento sugerido:**
 
 | Campo | Variável |
 |---|---|
-| `data.texto` | `horarios_texto`: envie como mensagem |
-| `data.quantidade` | `horarios_qtd` |
-| `data.opcao1_data` … `data.opcao9_data` | `opcao1_data` … `opcao9_data` |
-| `data.opcao1_horario` … `data.opcao9_horario` | `opcao1_horario` … `opcao9_horario` |
-| `data.opcao1_label` … | `opcao1_label` … (para confirmar a escolha) |
+| `message` | `horarios_mensagem`: ex. "Encontrei 3 horários" |
+| `data.opcoes` | `horarios_opcoes`: cada item tem `numero`, `data` (aaaa-mm-dd), `horario` (HH:mm) e `label` (ex. "16/09 (Quarta) 09:00") |
 
 **Escolha do cliente (etapa 6):**
 
-1. Envie `horarios_texto` e aguarde a resposta numérica.
-2. Valide que o número está entre 1 e `horarios_qtd`. Se não estiver, peça de novo.
-3. Com uma condição por número (1 → `opcao1_*`, 2 → `opcao2_*` …), copie para as variáveis `data_escolhida` e `horario_escolhido`.
+1. Envie `horarios_mensagem` e as opções, uma por item de `data.opcoes`, no formato `{numero}) {label}` (ou como botões/lista da Suri). Aguarde a resposta numérica.
+2. Valide que o número existe em `data.opcoes` (de 1 até a quantidade de itens). Se não existir, peça de novo.
+3. Pegue o item escolhido (posição `número − 1`) e copie `data` para `data_escolhida` e `horario` para `horario_escolhido`.
 
 **Ramificação:**
 
@@ -329,6 +331,140 @@ Resposta (sucesso):
 ## Etapas 9–10: confirmação
 
 Envie `mensagem_confirmacao`. O registro do agendamento fica no GFSIS (o id está em `id_agendamento`).
+
+---
+
+## Fluxos complementares (consultas)
+
+Consultas somente leitura que o cliente pode pedir a partir de um menu (ex.: *1) Agendar · 2) Meu próximo agendamento · 3) Nota fiscal · 4) Boletos em aberto · 5) Situação do pedido · 6) Falar com atendente*).
+
+- Todas recebem o documento do cliente em `documento` (CPF ou CNPJ). Também aceitam `cpf` ou `cnpj`.
+- Identifique o cliente antes. Links de boleto e de nota fiscal só devem ir para o titular do documento.
+- "Não encontrado" **não é erro**: vem com `ok:true` e um `code` próprio, e não é gravado no painel.
+- Erros de documento são `CPF_INVALIDO` e `CNPJ_INVALIDO`: peça o documento de novo.
+- `GFSIS_INDISPONIVEL` e `GFSIS_ERRO_CONSULTA`: envie `message` e transfira para um atendente.
+
+### Próximo agendamento
+
+**`POST /api/suri/agendamento/proximo`**
+
+```json
+{ "documento": "@User.IdentificationDocument" }
+```
+
+Resposta:
+
+```json
+{
+  "ok": true,
+  "code": "OK",
+  "message": "📅 Seu próximo agendamento é 16/09 (Quarta), às 09:00.",
+  "data": {
+    "possuiAgendamento": true,
+    "idAgendamento": "26030",
+    "data": "2026-09-16",
+    "dataFormatada": "16/09 (Quarta)",
+    "dataCompleta": "16/09/2026",
+    "horario": "09:00",
+    "mensagemAgendamento": "📅 Seu próximo agendamento é 16/09 (Quarta), às 09:00."
+  }
+}
+```
+
+| code | Ação |
+|---|---|
+| `OK` | Envie `data.mensagemAgendamento` |
+| `SEM_AGENDAMENTO` | Envie `message` e ofereça agendar (etapa 5) |
+
+### Nota fiscal
+
+**`POST /api/suri/nota-fiscal`**
+
+```json
+{ "documento": "@User.IdentificationDocument" }
+```
+
+Resposta:
+
+```json
+{
+  "ok": true,
+  "code": "OK",
+  "data": {
+    "possuiNota": true,
+    "quantidade": 2,
+    "texto": "🧾 Encontrei 2 notas fiscais:\n\n1) https://...\n\n2) https://...",
+    "nota1_link": "https://...",
+    "nota2_link": "https://..."
+  }
+}
+```
+
+| code | Ação |
+|---|---|
+| `OK` | Envie `data.texto` (os links já vêm nele) |
+| `NOTA_FISCAL_NAO_GERADA` | Envie `message`: a nota ainda será emitida |
+| `SEM_NOTA_FISCAL` | Envie `message` e ofereça um atendente |
+
+### Boletos em aberto
+
+**`POST /api/suri/boletos`**
+
+```json
+{ "documento": "@User.IdentificationDocument", "qtdBoletos": 5 }
+```
+
+- `qtdBoletos` é opcional: padrão 5, máximo 9.
+- Campos planos: `boleto1_link`, `boleto1_vencimento` e `boleto1_valor`, até `boleto9_*`. Vencimento e valor só vêm preenchidos se o GFSIS os informar; a documentação só garante o link.
+
+| code | Ação |
+|---|---|
+| `OK` | Envie `data.texto` |
+| `SEM_BOLETOS` | Envie `message` (nenhum boleto em aberto) |
+
+### Situação de um pedido
+
+**`POST /api/suri/pedido/situacao`**
+
+```json
+{
+  "documento": "@User.IdentificationDocument",
+  "numeroPedido": "@User.Variables.numero_pedido"
+}
+```
+
+- **Com `numeroPedido`:** consulta a situação desse pedido.
+  - Se `documento` também vier, o pedido só é mostrado quando pertence a ele. Caso contrário, a resposta é `PEDIDO_NAO_ENCONTRADO`, sem expor dados de terceiros.
+  - Precisa da unidade do GFSIS: `identificadorUnidade` no corpo, `GFSIS_UNIDADE_ID` ou, por último, `GFSIS_PONTO_ATENDIMENTO_ID`.
+  - `considerarPedidosInternos` (opcional, `true`/`false`) inclui pedidos que não foram feitos pelo site.
+- **Sem `numeroPedido`** (ou variável vazia): mostra o **último pedido** do documento.
+
+Resposta:
+
+```json
+{
+  "ok": true,
+  "code": "OK",
+  "data": {
+    "origem": "numero",
+    "numeroPedido": "12345",
+    "situacao": "Aprovado",
+    "produto": "Certificado Digital A1 - Pessoa Física",
+    "dataPedido": "15/08/2025",
+    "dataAprovacao": "16/08/2025",
+    "mensagemPedido": "📦 Pedido 12345\nProduto: Certificado Digital A1 - Pessoa Física\nSituação: Aprovado\nData do pedido: 15/08/2025\nAprovado em: 16/08/2025"
+  }
+}
+```
+
+No último pedido (`origem: "ultimo_pedido"`) também vêm `dataValidade`, `protocolo`, `valor` e `urlVideoconferencia`.
+
+| code | Ação |
+|---|---|
+| `OK` | Envie `data.mensagemPedido` |
+| `PEDIDO_NAO_ENCONTRADO`, `PEDIDO_INVALIDO` | Envie `message` e peça o número de novo (limite de 2 tentativas) |
+| `SEM_PEDIDO` | Envie `message` e ofereça um atendente |
+| `CONFIGURACAO_INVALIDA` | Unidade não configurada: ajuste `GFSIS_UNIDADE_ID` e transfira para um atendente |
 
 ---
 

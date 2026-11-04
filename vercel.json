@@ -4,7 +4,11 @@
     "app/api/suri/horarios/route.ts": { "maxDuration": 20 },
     "app/api/suri/agendar/route.ts": { "maxDuration": 20 },
     "app/api/suri/cliente/salvar/route.ts": { "maxDuration": 20 },
-    "app/api/suri/cliente/consultar/route.ts": { "maxDuration": 20 }
+    "app/api/suri/cliente/consultar/route.ts": { "maxDuration": 20 },
+    "app/api/suri/agendamento/proximo/route.ts": { "maxDuration": 20 },
+    "app/api/suri/nota-fiscal/route.ts": { "maxDuration": 20 },
+    "app/api/suri/boletos/route.ts": { "maxDuration": 20 },
+    "app/api/suri/pedido/situacao/route.ts": { "maxDuration": 20 }
   },
   "crons": [
     { "path": "/api/cron/cleanup", "schedule": "0 9 * * *" }

@@ -62,6 +62,7 @@ type Masker = (v: unknown) => string;
 const FIELD_MASKERS: Array<[RegExp, Masker]> = [
   [/^cpf$/i, maskCpf],
   [/^cnpj$/i, maskCnpj],
+  [/^(documento|documentocliente)$/i, (v) => (onlyDigits(v).length === 11 ? maskCpf(v) : maskCnpj(v))],
   [/^e-?mail(nf)?$/i, maskEmail],
   [/^(telefone|celular|phone|whatsapp)$/i, maskTelefone],
   [/^datanascimento$/i, maskDataNascimento],

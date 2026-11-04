@@ -125,19 +125,28 @@ describe("/horarios", () => {
     ]);
     expect(m.calls.find((c) => c.path === "/ConsultaHorarioAgenda")!.query.get("identificadorPontoAtendimento")).toBe("10");
     // 10:00 local + 30 min de antecedência → só 11:00 de hoje
-    expect(r.body).toMatchObject({
-      ok: true,
-      code: "OK",
-      data: {
-        quantidade: 2,
-        opcao1_data: "2026-09-15",
-        opcao1_horario: "11:00",
-        opcao2_data: "2026-09-16",
-        opcao2_horario: "09:00",
-        opcao2_label: "16/09 (Quarta) 09:00",
-      },
+    // data traz SOMENTE as opções.
+    expect(r.body).toMatchObject({ ok: true, code: "OK" });
+    expect(r.body.data).toEqual({
+      opcoes: [
+        { numero: 1, data: "2026-09-15", horario: "11:00", label: "15/09 (Terça) 11:00" },
+        { numero: 2, data: "2026-09-16", horario: "09:00", label: "16/09 (Quarta) 09:00" },
+      ],
     });
-    expect(r.body.data.texto).toContain("1) 15/09 (Terça) 11:00");
+    expect(r.body.message).toBe("Encontrei 2 horários");
+  });
+
+  it("respeita maxOpcoes", async () => {
+    captureErrorLogs();
+    mockFetch({
+      "POST /auth": authOk,
+      "GET /ConsultaHorarioAgenda": () => json({ horariosDisponiveis: ["07:00", "08:00", "09:00", "10:00", "11:00"] }),
+    });
+    const r = await callRoute(horarios, { periodo: "manha", dataInicial: "16/09/2026", dias: 3, maxOpcoes: "4" });
+    expect(r.body.message).toBe("Encontrei 4 horários");
+    expect(Object.keys(r.body.data)).toEqual(["opcoes"]);
+    expect(r.body.data.opcoes).toHaveLength(4);
+    expect(r.body.data.opcoes.map((o: { numero: number }) => o.numero)).toEqual([1, 2, 3, 4]);
   });
 
   it("sem horários no período → SEM_HORARIOS sem gravar erro", async () => {

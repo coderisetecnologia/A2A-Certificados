@@ -9,11 +9,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/admin";
 import { suriApiKey } from "@/lib/env";
+import { POST as agendamentoProximo } from "@/app/api/suri/agendamento/proximo/route";
 import { POST as agendar } from "@/app/api/suri/agendar/route";
+import { POST as boletos } from "@/app/api/suri/boletos/route";
 import { POST as clienteConsultar } from "@/app/api/suri/cliente/consultar/route";
 import { POST as clienteSalvar } from "@/app/api/suri/cliente/salvar/route";
 import { GET as health } from "@/app/api/suri/health/route";
 import { POST as horarios } from "@/app/api/suri/horarios/route";
+import { POST as notaFiscal } from "@/app/api/suri/nota-fiscal/route";
+import { POST as pedidoSituacao } from "@/app/api/suri/pedido/situacao/route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +28,10 @@ const ROTAS = {
   "cliente/salvar": { path: "/api/suri/cliente/salvar", method: "POST" },
   horarios: { path: "/api/suri/horarios", method: "POST" },
   agendar: { path: "/api/suri/agendar", method: "POST" },
+  "agendamento/proximo": { path: "/api/suri/agendamento/proximo", method: "POST" },
+  "nota-fiscal": { path: "/api/suri/nota-fiscal", method: "POST" },
+  boletos: { path: "/api/suri/boletos", method: "POST" },
+  "pedido/situacao": { path: "/api/suri/pedido/situacao", method: "POST" },
 } as const;
 
 type Rota = keyof typeof ROTAS;
@@ -33,6 +41,10 @@ const HANDLERS: Record<Exclude<Rota, "health">, (req: NextRequest) => Promise<Ne
   "cliente/salvar": clienteSalvar,
   horarios,
   agendar,
+  "agendamento/proximo": agendamentoProximo,
+  "nota-fiscal": notaFiscal,
+  boletos,
+  "pedido/situacao": pedidoSituacao,
 };
 
 const schema = z.object({

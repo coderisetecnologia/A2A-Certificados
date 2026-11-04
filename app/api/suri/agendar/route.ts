@@ -11,8 +11,10 @@
 import { z } from "zod";
 import { dadosConfirmacao, mesmoAgendamento } from "@/lib/agendamento";
 import {
+  booleano,
   camposFaltantes,
   clienteCamposSchema,
+  inteiroPositivo,
   completarEndereco,
   fromGfsis,
   mergeCliente,
@@ -32,21 +34,12 @@ import {
   type AgendamentoPayload,
 } from "@/lib/gfsis";
 import { maskEmail } from "@/lib/mask";
-import { cleanText, formatCep, normalizeData, normalizeHorario, slug } from "@/lib/normalize";
+import { cleanText, formatCep, normalizeData, normalizeHorario } from "@/lib/normalize";
 import { suriHandler, type SuriContext } from "@/lib/suri-handler";
 import { formatDataCurta, nowInTz, toMinutes } from "@/lib/time";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const booleano = z.preprocess((v) => {
-  if (typeof v === "boolean") return v;
-  const s = slug(cleanText(v));
-  if (!s) return undefined;
-  if (["true", "1", "sim", "s", "yes", "online"].includes(s)) return true;
-  if (["false", "0", "nao", "n", "no", "presencial"].includes(s)) return false;
-  return v;
-}, z.boolean().optional());
 
 const schema = z.object({
   data: textoObrigatorio("data"),
@@ -55,10 +48,7 @@ const schema = z.object({
   videoconferencia: booleano,
   observacao: z.preprocess((v) => cleanText(v), z.string().max(500).optional()),
   contato: z.preprocess((v) => cleanText(v), z.string().max(200).optional()),
-  identificadorPontoAtendimento: z.preprocess((v) => {
-    const s = cleanText(v);
-    return s === undefined ? undefined : Number(s);
-  }, z.number().int().positive().optional()),
+  identificadorPontoAtendimento: inteiroPositivo,
 });
 
 const VERIFICACAO_RESERVA_MS = 2_000;

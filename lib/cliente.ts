@@ -6,13 +6,29 @@ import type { Budget } from "./budget";
 import { isValidCpf, normalizeCpf } from "./cpf";
 import { failure, type HandlerResult } from "./errors";
 import type { ClienteGfsis, ClientePayload } from "./gfsis";
-import { cleanText, formatCep, isValidEmail, normalizeCep, normalizeData, normalizeTelefone } from "./normalize";
+import { cleanText, formatCep, isValidEmail, normalizeCep, normalizeData, normalizeTelefone, slug } from "./normalize";
 import { buscarCep } from "./viacep";
 
 /** Texto opcional tolerante (aceita número, "", null, variável não resolvida da Suri). */
 export const texto = z.preprocess((v) => cleanText(v), z.string().max(300).optional());
 export const textoObrigatorio = (campo: string) =>
   z.preprocess((v) => cleanText(v), z.string({ error: `${campo} é obrigatório` }).max(300));
+
+/** Booleano tolerante: true/false, "sim"/"não", "1"/"0", "online"/"presencial". */
+export const booleano = z.preprocess((v) => {
+  if (typeof v === "boolean") return v;
+  const s = slug(cleanText(v));
+  if (!s) return undefined;
+  if (["true", "1", "sim", "s", "yes", "online"].includes(s)) return true;
+  if (["false", "0", "nao", "n", "no", "presencial"].includes(s)) return false;
+  return v;
+}, z.boolean().optional());
+
+/** Inteiro positivo opcional (aceita "10" ou 10; variável vazia da Suri vira undefined). */
+export const inteiroPositivo = z.preprocess((v) => {
+  const s = cleanText(v);
+  return s === undefined ? undefined : Number(s);
+}, z.number().int().positive().optional());
 
 export const clienteCamposSchema = z.object({
   nome: texto,

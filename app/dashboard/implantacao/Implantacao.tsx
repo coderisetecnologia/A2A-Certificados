@@ -134,7 +134,8 @@ export function Implantacao({
         "complemento: texto (opcional)",
         "periodo: texto (manha, tarde ou noite)",
         "data_escolhida e horario_escolhido: texto",
-        "Variáveis de apoio do flow: gfsis_code, cliente_encontrado, cadastro_completo, falta_nascimento, falta_endereco, falta_email, horarios_texto, horarios_qtd, opcao1_data … opcao9_data, opcao1_horario … opcao9_horario, mensagem_confirmacao, id_agendamento, correlation_id",
+        "numero_pedido: texto (consulta de situação do pedido)",
+        "Variáveis de apoio do flow: gfsis_code, cliente_encontrado, cadastro_completo, falta_nascimento, falta_endereco, falta_email, horarios_mensagem, horarios_opcoes, mensagem_confirmacao, id_agendamento, correlation_id",
       ],
       nota:
         "Os nomes acima são sugestões. Se a sua conta usar outros nomes (ex.: @User.Variables.cep), ajuste nos corpos das requisições abaixo. Confira o nome exato no seletor de variáveis do editor de flows.",
@@ -159,14 +160,15 @@ export function Implantacao({
     },
     {
       id: "consultar",
-      titulo: "Pedir o CPF e consultar o cliente (etapa 3)",
+      titulo: "Pedir o CPF ou CNPJ e consultar o cliente (etapa 3)",
       resumo:
-        "Peça o CPF, salve no campo de documento do contato e chame a consulta. Cliente não encontrado NÃO é erro: vem com ok:true e encontrado:false.",
+        "Peça o CPF ou CNPJ, salve no campo de documento do contato e chame a consulta. A API descobre sozinha se é CPF ou CNPJ (também aceita os campos cpf ou cnpj no lugar de documento). Cliente não encontrado NÃO é erro: vem com ok:true e encontrado:false.",
       rota: "/cliente/consultar",
-      body: { cpf: "@User.IdentificationDocument" },
+      body: { documento: "@User.IdentificationDocument" },
       mapa: [
         { campo: "code", variavel: "gfsis_code", uso: "Ramificação principal" },
         { campo: "data.encontrado", variavel: "cliente_encontrado", uso: "Cliente novo × existente" },
+        { campo: "data.tipoDocumento", variavel: "tipo_documento", uso: "cpf ou cnpj" },
         { campo: "data.primeiroNome", variavel: "primeiro_nome", uso: "“Olá, {primeiro_nome}!”" },
         { campo: "data.emailMascarado", variavel: "email_mascarado", uso: "“Confirma o e-mail {email_mascarado}?”" },
         { campo: "data.cadastroCompleto", variavel: "cadastro_completo", uso: "Pular direto para os horários" },
@@ -176,7 +178,7 @@ export function Implantacao({
         { campo: "correlationId", variavel: "correlation_id", uso: "Rastrear erros no painel" },
       ],
       ramos: [
-        { code: "CPF_INVALIDO", acao: "Enviar message e pedir o CPF de novo (limite de 2 tentativas)." },
+        { code: "CPF_INVALIDO, CNPJ_INVALIDO", acao: "Enviar message e pedir o documento de novo (limite de 2 tentativas)." },
         { code: "cadastro_completo = true", acao: "Ir para “Perguntar o período”." },
         { code: "OK / CLIENTE_NAO_ENCONTRADO (incompleto)", acao: "Ir para “Coletar dados e salvar cliente”." },
         { code: "GFSIS_INDISPONIVEL / outro", acao: "Enviar message e transferir para um atendente." },
@@ -224,14 +226,11 @@ export function Implantacao({
       body: { periodo: "@User.Variables.periodo", dias: 5, maxOpcoes: 6 },
       mapa: [
         { campo: "code", variavel: "gfsis_code", uso: "Ramificação" },
-        { campo: "data.texto", variavel: "horarios_texto", uso: "Enviar como mensagem (lista numerada pronta)" },
-        { campo: "data.quantidade", variavel: "horarios_qtd", uso: "Validar a escolha do cliente" },
-        { campo: "data.opcao1_data … data.opcao9_data", variavel: "opcao1_data … opcao9_data", uso: "Data de cada opção (aaaa-mm-dd)" },
-        { campo: "data.opcao1_horario … data.opcao9_horario", variavel: "opcao1_horario … opcao9_horario", uso: "Horário de cada opção (HH:mm)" },
-        { campo: "data.opcao1_label …", variavel: "opcao1_label …", uso: "Texto para confirmar a escolha" },
+        { campo: "message", variavel: "horarios_mensagem", uso: "Ex.: “Encontrei 6 horários”" },
+        { campo: "data.opcoes", variavel: "horarios_opcoes", uso: "Até maxOpcoes itens: numero, data (aaaa-mm-dd), horario (HH:mm), label" },
       ],
       ramos: [
-        { code: "OK", acao: "Enviar horarios_texto e ir para “Receber a escolha”." },
+        { code: "OK", acao: "Enviar horarios_mensagem e as opções ({numero}) {label}, ou botões/lista) e ir para “Receber a escolha”." },
         { code: "SEM_HORARIOS", acao: "Enviar message (já sugere outro período) e voltar ao menu de período." },
         { code: "PONTO_NAO_ENCONTRADO, GFSIS_INDISPONIVEL", acao: "Enviar message e transferir para um atendente." },
       ],
@@ -244,9 +243,9 @@ export function Implantacao({
       resumo: "Não há chamada à API aqui: é lógica do flow.",
       itens: [
         "Aguarde a resposta numérica do cliente.",
-        "Valide que o número está entre 1 e horarios_qtd. Se não estiver, peça de novo.",
-        "Crie uma condição por número: 1 → copie opcao1_data para data_escolhida e opcao1_horario para horario_escolhido; 2 → opcao2_*; e assim por diante até 9.",
-        "Opcional: confirme com o cliente usando opcaoN_label antes de agendar.",
+        "Valide que o número existe em data.opcoes (de 1 até a quantidade de itens). Se não existir, peça de novo.",
+        "Pegue o item escolhido de data.opcoes (posição número − 1) e copie data para data_escolhida e horario para horario_escolhido.",
+        "Opcional: confirme com o cliente usando o label do item escolhido antes de agendar.",
       ],
     },
     {
@@ -295,6 +294,101 @@ export function Implantacao({
       ],
     },
     {
+      id: "menu-complementar",
+      titulo: "Montar o menu de consultas (fluxos complementares)",
+      resumo:
+        "Além de agendar, o cliente pode consultar o próximo agendamento, a nota fiscal, os boletos em aberto e a situação de um pedido. Todas as consultas usam o mesmo CPF/CNPJ já coletado e são somente leitura.",
+      itens: [
+        "Crie um menu, por exemplo: 1) Agendar atendimento · 2) Meu próximo agendamento · 3) Nota fiscal · 4) Boletos em aberto · 5) Situação do pedido · 6) Falar com atendente.",
+        "Antes de qualquer consulta, peça o CPF ou CNPJ (se ainda não tiver) e salve em @User.IdentificationDocument.",
+        "Cada opção chama uma das rotas abaixo e envia o texto pronto (mensagemAgendamento, texto ou mensagemPedido).",
+        "Ao final, ofereça voltar ao menu ou encerrar.",
+      ],
+      nota:
+        "Os links de boleto e de nota fiscal vêm do próprio GFSIS. Envie-os apenas ao titular do documento: só faça essas consultas depois de identificar o cliente.",
+    },
+    {
+      id: "proximo-agendamento",
+      titulo: "Consultar o próximo agendamento",
+      resumo: "Mostra o próximo agendamento futuro (não cancelado). Sem agendamento NÃO é erro: vem ok:true com SEM_AGENDAMENTO.",
+      rota: "/agendamento/proximo",
+      body: { documento: "@User.IdentificationDocument" },
+      mapa: [
+        { campo: "code", variavel: "gfsis_code", uso: "Ramificação" },
+        { campo: "data.possuiAgendamento", variavel: "possui_agendamento", uso: "Tem ou não agendamento" },
+        { campo: "data.mensagemAgendamento", variavel: "mensagem_agendamento", uso: "Enviar direto ao cliente" },
+        { campo: "data.dataFormatada / data.horario", variavel: "data_formatada / horario_agendado", uso: "Montar mensagem própria" },
+      ],
+      ramos: [
+        { code: "OK", acao: "Enviar mensagem_agendamento." },
+        { code: "SEM_AGENDAMENTO", acao: "Enviar message e oferecer “Agendar atendimento”." },
+        { code: "CPF_INVALIDO, CNPJ_INVALIDO", acao: "Pedir o documento de novo." },
+        { code: "GFSIS_INDISPONIVEL", acao: "Enviar message e transferir para um atendente." },
+      ],
+    },
+    {
+      id: "nota-fiscal",
+      titulo: "Consultar nota fiscal",
+      resumo: "Devolve os links das notas fiscais do cliente, já numerados no campo texto.",
+      rota: "/nota-fiscal",
+      body: { documento: "@User.IdentificationDocument" },
+      mapa: [
+        { campo: "code", variavel: "gfsis_code", uso: "Ramificação" },
+        { campo: "data.texto", variavel: "notas_texto", uso: "Enviar direto ao cliente (links incluídos)" },
+        { campo: "data.quantidade", variavel: "notas_qtd", uso: "Quantas notas vieram" },
+        { campo: "data.nota1_link … data.nota9_link", variavel: "nota1_link …", uso: "Link de cada nota" },
+      ],
+      ramos: [
+        { code: "OK", acao: "Enviar notas_texto." },
+        { code: "NOTA_FISCAL_NAO_GERADA", acao: "Enviar message (a nota ainda será emitida)." },
+        { code: "SEM_NOTA_FISCAL", acao: "Enviar message e oferecer falar com um atendente." },
+        { code: "CPF_INVALIDO, CNPJ_INVALIDO", acao: "Pedir o documento de novo." },
+        { code: "GFSIS_ERRO_CONSULTA, GFSIS_INDISPONIVEL", acao: "Enviar message e transferir para um atendente." },
+      ],
+    },
+    {
+      id: "boletos",
+      titulo: "Consultar boletos em aberto",
+      resumo: "Devolve os links dos boletos emitidos e ainda em aberto. qtdBoletos é opcional (padrão 5, máx. 9).",
+      rota: "/boletos",
+      body: { documento: "@User.IdentificationDocument", qtdBoletos: 5 },
+      mapa: [
+        { campo: "code", variavel: "gfsis_code", uso: "Ramificação" },
+        { campo: "data.texto", variavel: "boletos_texto", uso: "Enviar direto ao cliente (links incluídos)" },
+        { campo: "data.quantidade", variavel: "boletos_qtd", uso: "Quantos boletos vieram" },
+        { campo: "data.boleto1_link … data.boleto9_link", variavel: "boleto1_link …", uso: "Link de cada boleto" },
+      ],
+      ramos: [
+        { code: "OK", acao: "Enviar boletos_texto." },
+        { code: "SEM_BOLETOS", acao: "Enviar message (nenhum boleto em aberto)." },
+        { code: "CPF_INVALIDO, CNPJ_INVALIDO", acao: "Pedir o documento de novo." },
+        { code: "GFSIS_ERRO_CONSULTA, GFSIS_INDISPONIVEL", acao: "Enviar message e transferir para um atendente." },
+      ],
+    },
+    {
+      id: "pedido",
+      titulo: "Consultar a situação de um pedido",
+      resumo:
+        "Pergunte o número do pedido (opcional). Com o número, a API mostra a situação desse pedido e confere se ele pertence ao documento enviado. Sem o número (variável vazia), mostra o último pedido do cliente.",
+      rota: "/pedido/situacao",
+      body: { documento: "@User.IdentificationDocument", numeroPedido: "@User.Variables.numero_pedido" },
+      mapa: [
+        { campo: "code", variavel: "gfsis_code", uso: "Ramificação" },
+        { campo: "data.mensagemPedido", variavel: "mensagem_pedido", uso: "Enviar direto ao cliente" },
+        { campo: "data.situacao", variavel: "situacao_pedido", uso: "Ex.: Aprovado, Emitido" },
+        { campo: "data.numeroPedido", variavel: "numero_pedido", uso: "Número do pedido consultado" },
+      ],
+      ramos: [
+        { code: "OK", acao: "Enviar mensagem_pedido." },
+        { code: "PEDIDO_NAO_ENCONTRADO, PEDIDO_INVALIDO", acao: "Enviar message e pedir o número de novo (limite de 2 tentativas)." },
+        { code: "SEM_PEDIDO", acao: "Enviar message e oferecer falar com um atendente." },
+        { code: "CPF_INVALIDO, CNPJ_INVALIDO", acao: "Pedir o documento de novo." },
+        { code: "GFSIS_ERRO_CONSULTA, GFSIS_INDISPONIVEL, CONFIGURACAO_INVALIDA", acao: "Enviar message e transferir para um atendente." },
+      ],
+      nota:
+        "A consulta por número exige a unidade do GFSIS (identificadorUnidade). Configure GFSIS_UNIDADE_ID na Vercel; sem ela, a API usa GFSIS_PONTO_ATENDIMENTO_ID.",
+    },
+    {
       id: "humano",
       titulo: "Configurar a transferência para atendente",
       resumo: "Todos os ramos de erro técnico terminam aqui. Crie um único bloco reutilizável.",
@@ -332,7 +426,17 @@ export function Implantacao({
                                                              ▼
                                         agendar ─┬─ OK / JA_AGENDADO ─▶ confirmar
                                                  ├─ HORARIO_INDISPONIVEL ─▶ horarios
-                                                 └─ GFSIS_INDISPONIVEL ─▶ atendente`;
+                                                 └─ GFSIS_INDISPONIVEL ─▶ atendente
+
+Menu de consultas (CPF/CNPJ já identificado):
+  ├─ Próximo agendamento ─▶ agendamento/proximo ─┬─ OK ─▶ mensagemAgendamento
+  │                                               └─ SEM_AGENDAMENTO ─▶ oferecer agendar
+  ├─ Nota fiscal ─────────▶ nota-fiscal ─────────┬─ OK ─▶ texto (links)
+  │                                               └─ NOTA_FISCAL_NAO_GERADA / SEM_NOTA_FISCAL
+  ├─ Boletos em aberto ───▶ boletos ─────────────┬─ OK ─▶ texto (links)
+  │                                               └─ SEM_BOLETOS
+  └─ Situação do pedido ──▶ pedido/situacao ─────┬─ OK ─▶ mensagemPedido
+                                                  └─ PEDIDO_NAO_ENCONTRADO ─▶ pedir nº de novo`;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">

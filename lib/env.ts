@@ -74,6 +74,27 @@ export function resolverPontoAtendimento(informado?: number): number {
   return padrao;
 }
 
+/**
+ * Unidade usada na consulta de situação do pedido (identificadorUnidade):
+ * a enviada na requisição, senão GFSIS_UNIDADE_ID, senão o ponto de atendimento padrão.
+ */
+export function resolverUnidade(informada?: number): number {
+  if (informada !== undefined) return informada;
+  const raw = process.env.GFSIS_UNIDADE_ID?.trim();
+  if (raw) {
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1) throw new ConfigError("GFSIS_UNIDADE_ID deve ser um número inteiro positivo");
+    return n;
+  }
+  const ponto = pontoAtendimentoPadrao();
+  if (ponto === null) {
+    throw new ConfigError(
+      "GFSIS_UNIDADE_ID (ou GFSIS_PONTO_ATENDIMENTO_ID) não configurado e identificadorUnidade não enviado na requisição",
+    );
+  }
+  return ponto;
+}
+
 /** Retorna null quando não configurada (as rotas falham fechadas com 401). */
 export function suriApiKey(): string | null {
   return process.env.SURI_API_KEY?.trim() || null;

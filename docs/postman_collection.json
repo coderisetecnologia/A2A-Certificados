@@ -69,6 +69,51 @@
       }
     },
     {
+      "name": "3 - Consultar cliente (CNPJ)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/suri/cliente/consultar",
+        "body": { "mode": "raw", "raw": "{\n  \"documento\": \"11.222.333/0001-81\"\n}" }
+      }
+    },
+    {
+      "name": "Complementar - Próximo agendamento",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/suri/agendamento/proximo",
+        "body": { "mode": "raw", "raw": "{\n  \"documento\": \"52998224725\"\n}" }
+      }
+    },
+    {
+      "name": "Complementar - Nota fiscal",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/suri/nota-fiscal",
+        "body": { "mode": "raw", "raw": "{\n  \"documento\": \"52998224725\"\n}" }
+      }
+    },
+    {
+      "name": "Complementar - Boletos em aberto",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/suri/boletos",
+        "body": { "mode": "raw", "raw": "{\n  \"documento\": \"52998224725\",\n  \"qtdBoletos\": 5\n}" }
+      }
+    },
+    {
+      "name": "Complementar - Situação do pedido",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/suri/pedido/situacao",
+        "body": { "mode": "raw", "raw": "{\n  \"documento\": \"52998224725\",\n  \"numeroPedido\": \"12345\"\n}" }
+      }
+    },
+    {
       "name": "Cron - limpeza (manual)",
       "request": {
         "auth": {

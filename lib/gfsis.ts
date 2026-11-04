@@ -14,6 +14,7 @@ import { Budget, BudgetExceededError } from "./budget";
 import { gfsisConfig } from "./env";
 import { normalizeCep, normalizeData, normalizeHorario, normalizeTelefone } from "./normalize";
 import { onlyDigits } from "./cpf";
+import { queryDocumento, type Documento } from "./documento";
 
 // ─── Erros ────────────────────────────────────────────────────────────────
 
@@ -436,8 +437,9 @@ export type ConsultaClienteResult =
   | { status: "nao_encontrado" }
   | { status: "cpf_invalido"; mensagem: string };
 
-export async function consultarCliente(cpf: string, budget: Budget): Promise<ConsultaClienteResult> {
-  const res = await gfsisRequest("GET", "ConsultaCliente", { query: { cpf }, budget });
+/** GET /ConsultaCliente?cpf= ou ?cnpj= (string = CPF, por compatibilidade). */
+export async function consultarCliente(doc: Documento | string, budget: Budget): Promise<ConsultaClienteResult> {
+  const res = await gfsisRequest("GET", "ConsultaCliente", { query: queryDocumento(doc), budget });
   // O GFSIS responde "Cliente não encontrado" / "CPF inválido" como HTTP 500.
   const negocio = erroNegocio(res.data);
   if (res.status === 404 || RE_CLIENTE_NAO_ENCONTRADO.test(negocio)) return { status: "nao_encontrado" };
@@ -510,13 +512,13 @@ export async function consultarHorariosDia(data: string, ponto: number, budget: 
   };
 }
 
-/** GET /ConsultaAgendamentoCliente — próximo agendamento futuro e não cancelado. */
+/** GET /ConsultaAgendamentoCliente — próximo agendamento futuro e não cancelado (CPF ou CNPJ). */
 export async function consultarProximoAgendamento(
-  cpf: string,
+  doc: Documento | string,
   budget: Budget,
   opts: { timeoutMs?: number; retry?: boolean } = {},
 ): Promise<AgendamentoInfo | null> {
-  const res = await gfsisRequest("GET", "ConsultaAgendamentoCliente", { query: { cpf }, budget, ...opts });
+  const res = await gfsisRequest("GET", "ConsultaAgendamentoCliente", { query: queryDocumento(doc), budget, ...opts });
   // "Cliente não possui nenhum agendamento" / "CPF inválido" vêm como HTTP 500.
   const negocio = erroNegocio(res.data);
   if (res.status === 404) return null;
@@ -580,6 +582,289 @@ export async function criarAgendamento(
   if (res.status === 409) return { status: "indisponivel", mensagem: mensagem || "Horário não disponível" };
   if (res.status === 404) return { status: "ponto_nao_encontrado", mensagem, text: res.text };
   return { status: "invalido", httpStatus: res.status, mensagem, erros, text: res.text };
+}
+
+// ─── Consultas complementares: nota fiscal, boletos e pedidos ─────────────
+
+const RE_SEM_NOTA = /nao existe nota|nenhuma nota|nota fiscal nao encontrad/;
+const RE_NOTA_NAO_GERADA = /nota fiscal nao gerada|nao gerad/;
+const RE_SEM_BOLETO = /nao (existe|possui|ha) (nenhum )?boleto|nenhum boleto|sem boleto/;
+const RE_SEM_PEDIDO = /nao possui (nenhum )?pedido|nenhum pedido/;
+const RE_PEDIDO_NAO_ENCONTRADO = /pedido nao (foi )?encontrad/;
+
+/**
+ * Resposta "de negócio" dos endpoints de consulta: HTTP 200 com
+ * { success: true, code: "002", message: "..." }. Retorna null se não for esse formato.
+ */
+export function respostaCodigo(data: unknown): { codigo: string; mensagem: string } | null {
+  if (!isRecord(data)) return null;
+  const codigo = str(data.code ?? data.codigo);
+  if (!/^\d{1,3}$/.test(codigo)) return null;
+  return { codigo: codigo.padStart(3, "0"), mensagem: str(data.message ?? data.mensagem) };
+}
+
+/** Itens de uma lista: aceita [...], { <chave>: [...] } ou um objeto único. Strings viram { link }. */
+function itensDe(data: unknown, chaves: string[]): Record<string, unknown>[] {
+  let lista: unknown[];
+  if (Array.isArray(data)) {
+    lista = data;
+  } else if (isRecord(data)) {
+    const interna = chaves.map((k) => data[k]).find(Array.isArray);
+    lista = interna ?? [data];
+  } else {
+    return [];
+  }
+  return lista
+    .map((v) => (typeof v === "string" ? { link: v } : v))
+    .filter(isRecord);
+}
+
+/** Remove ";" ou espaços no fim (o exemplo da documentação traz "...;"). Só aceita http(s). */
+function limparLink(v: unknown): string {
+  const s = str(v).replace(/[;,\s]+$/, "");
+  return /^https?:\/\/\S+$/i.test(s) ? s : "";
+}
+
+/** Resposta inesperada do GFSIS: vira GFSIS_ERRO_CONSULTA e é gravada. */
+export type ConsultaInvalida = { status: "invalido"; httpStatus: number; mensagem: string; text: string };
+
+export type ConsultaListaErro = { status: "documento_invalido"; mensagem: string } | ConsultaInvalida;
+
+function consultaInvalida(res: GfsisResponse): ConsultaInvalida {
+  const cod = respostaCodigo(res.data);
+  return {
+    status: "invalido",
+    httpStatus: res.status,
+    mensagem: cod
+      ? `${cod.codigo}: ${cod.mensagem}`
+      : mensagemErroNegocio(res.data) ?? parseGfsisErrors(res.data, res.text)[0]?.mensagem ?? `Status ${res.status}`,
+    text: res.text,
+  };
+}
+
+// Nota fiscal ------------------------------------------------------------
+
+export interface NotaFiscalInfo {
+  link: string;
+  numero: string;
+  tipo: string;
+  dataEmissao: string;
+}
+
+export function parseNotasFiscais(data: unknown): NotaFiscalInfo[] {
+  return itensDe(data, ["notas", "notasFiscais", "lista"])
+    .map((n) => ({
+      link: limparLink(n.linkNotaFiscal ?? n.link ?? n.url),
+      numero: str(n.numeroNotaFiscal ?? n.numeroNota ?? n.numero),
+      tipo: str(n.tipo ?? n.tipoNota),
+      dataEmissao: str(n.dataEmissao ?? n.data),
+    }))
+    .filter((n) => n.link);
+}
+
+export type NotasFiscaisResult =
+  | { status: "ok"; notas: NotaFiscalInfo[] }
+  | { status: "nao_gerada"; mensagem: string }
+  | { status: "sem_nota"; mensagem: string }
+  | ConsultaListaErro;
+
+/** GET /ConsultaNotaFiscal?cpf= ou ?cnpj= — links das notas fiscais do cliente. */
+export async function consultarNotasFiscais(doc: Documento, budget: Budget): Promise<NotasFiscaisResult> {
+  const res = await gfsisRequest("GET", "ConsultaNotaFiscal", { query: queryDocumento(doc), budget });
+  const negocio = erroNegocio(res.data);
+  const cod = respostaCodigo(res.data);
+  // O código decide; a mensagem só é usada quando o código não é um dos documentados.
+  const msgCod = cod && cod.codigo !== "002" && cod.codigo !== "003" ? semAcento(cod.mensagem) : "";
+  if (cod?.codigo === "003" || RE_NOTA_NAO_GERADA.test(msgCod)) return { status: "nao_gerada", mensagem: cod?.mensagem ?? "" };
+  if (cod?.codigo === "002" || res.status === 404 || RE_SEM_NOTA.test(negocio) || RE_SEM_NOTA.test(msgCod) || RE_CLIENTE_NAO_ENCONTRADO.test(negocio)) {
+    return { status: "sem_nota", mensagem: cod?.mensagem ?? mensagemErroNegocio(res.data) ?? "" };
+  }
+  if (RE_CPF_INVALIDO.test(negocio) || res.status === 400) {
+    return { status: "documento_invalido", mensagem: mensagemErroNegocio(res.data) ?? "Documento inválido" };
+  }
+  if (res.status === 200 && !negocio && !cod) {
+    if (Array.isArray(res.data) && res.data.length === 0) return { status: "sem_nota", mensagem: "" };
+    const notas = parseNotasFiscais(res.data);
+    if (notas.length > 0) return { status: "ok", notas };
+  }
+  return consultaInvalida(res);
+}
+
+// Boletos ----------------------------------------------------------------
+
+export interface BoletoInfo {
+  link: string;
+  vencimento: string | null;
+  valor: number | null;
+  linhaDigitavel: string;
+}
+
+function numero(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  const s = str(v).replace(/[^\d,.-]/g, "");
+  if (!s) return null;
+  // "1.234,56" → 1234.56 ; "1234.56" → 1234.56
+  const n = Number(s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function parseBoletos(data: unknown): BoletoInfo[] {
+  return itensDe(data, ["boletos", "lista"])
+    .map((b) => ({
+      link: limparLink(b.linkBoleto ?? b.link ?? b.url),
+      vencimento: normalizeData(b.dataVencimento ?? b.vencimento),
+      valor: numero(b.valor ?? b.valorBoleto ?? b.valorTitulo),
+      linhaDigitavel: str(b.linhaDigitavel ?? b.codigoBarras),
+    }))
+    .filter((b) => b.link);
+}
+
+export type BoletosResult = { status: "ok"; boletos: BoletoInfo[] } | { status: "sem_boletos"; mensagem: string } | ConsultaListaErro;
+
+/** GET /ConsultaBoletosEmitidos?cpf=|cnpj=&qtdBoletos= — boletos emitidos e em aberto. */
+export async function consultarBoletosAbertos(doc: Documento, qtdBoletos: number, budget: Budget): Promise<BoletosResult> {
+  const res = await gfsisRequest("GET", "ConsultaBoletosEmitidos", {
+    query: { ...queryDocumento(doc), qtdBoletos },
+    budget,
+  });
+  const negocio = erroNegocio(res.data);
+  const cod = respostaCodigo(res.data);
+  const msgCod = cod ? semAcento(cod.mensagem) : "";
+  if (cod?.codigo === "002" || res.status === 404 || RE_SEM_BOLETO.test(negocio) || RE_SEM_BOLETO.test(msgCod) || RE_CLIENTE_NAO_ENCONTRADO.test(negocio)) {
+    return { status: "sem_boletos", mensagem: cod?.mensagem ?? mensagemErroNegocio(res.data) ?? "" };
+  }
+  if (RE_CPF_INVALIDO.test(negocio) || res.status === 400) {
+    return { status: "documento_invalido", mensagem: mensagemErroNegocio(res.data) ?? "Documento inválido" };
+  }
+  if (res.status === 200 && !negocio && !cod) {
+    if (Array.isArray(res.data) && res.data.length === 0) return { status: "sem_boletos", mensagem: "" };
+    const boletos = parseBoletos(res.data);
+    if (boletos.length > 0) return { status: "ok", boletos };
+  }
+  return consultaInvalida(res);
+}
+
+// Pedidos ----------------------------------------------------------------
+
+export interface PedidoInfo {
+  numero: string;
+  dataPedido: string;
+  situacao: string;
+  produto: string;
+  dataAprovacao: string;
+  numeroSolicitacao: string;
+  nomeUnidade: string;
+  nomeCliente: string;
+  /** Somente dígitos/letras, sem máscara. */
+  documentoCliente: string;
+  emailCliente: string;
+}
+
+/** Retorno do ConsultaPedidoVendaLTS (situação de um pedido). */
+export function parsePedido(data: unknown): PedidoInfo | null {
+  if (!isRecord(data)) return null;
+  const p: PedidoInfo = {
+    numero: str(data.identificadorPedido ?? data.identificador ?? data.id),
+    dataPedido: str(data.dataPedido ?? data.data),
+    situacao: str(data.situacaoPedido ?? data.situacao),
+    produto: str(data.produtoPedido ?? data.produto),
+    dataAprovacao: str(data.dataAprovacaoPedido ?? data.dataAprovacao),
+    numeroSolicitacao: str(data.numeroSolicitacao),
+    nomeUnidade: str(data.nomeUnidade),
+    nomeCliente: str(data.nomeCliente),
+    documentoCliente: str(data.documentoCliente).toUpperCase().replace(/[^0-9A-Z]/g, ""),
+    emailCliente: str(data.emailCliente),
+  };
+  if (!p.situacao && !p.numero) return null;
+  return p;
+}
+
+export type SituacaoPedidoResult =
+  | { status: "ok"; pedido: PedidoInfo }
+  | { status: "nao_encontrado"; mensagem: string }
+  | ConsultaInvalida;
+
+/**
+ * GET /ConsultaPedidoVendaLTS — situação de um pedido pelo número.
+ * A documentação mostra os parâmetros num corpo JSON, mas GET não leva corpo
+ * no fetch: enviamos como query string (validar em homologação).
+ */
+export async function consultarSituacaoPedido(
+  params: { identificadorPedido: number; identificadorUnidade: number; considerarPedidosInternos?: boolean },
+  budget: Budget,
+): Promise<SituacaoPedidoResult> {
+  const res = await gfsisRequest("GET", "ConsultaPedidoVendaLTS", {
+    query: {
+      identificadorPedido: params.identificadorPedido,
+      identificadorUnidade: params.identificadorUnidade,
+      considerarPedidosInternos:
+        params.considerarPedidosInternos === undefined ? undefined : String(params.considerarPedidosInternos),
+    },
+    budget,
+  });
+  const negocio = erroNegocio(res.data);
+  const cod = respostaCodigo(res.data);
+  const msgCod = cod ? semAcento(cod.mensagem) : "";
+  if (cod?.codigo === "002" || res.status === 404 || RE_PEDIDO_NAO_ENCONTRADO.test(negocio) || RE_PEDIDO_NAO_ENCONTRADO.test(msgCod)) {
+    return { status: "nao_encontrado", mensagem: cod?.mensagem ?? mensagemErroNegocio(res.data) ?? "" };
+  }
+  if (res.status === 200 && !negocio && !cod) {
+    const pedido = parsePedido(res.data);
+    if (pedido) return { status: "ok", pedido };
+  }
+  return consultaInvalida(res);
+}
+
+export interface UltimoPedidoInfo {
+  numero: string;
+  produto: string;
+  situacao: string;
+  dataAprovacao: string;
+  dataValidade: string;
+  valor: number | null;
+  protocolo: string;
+  urlVideoconferencia: string;
+}
+
+/** Retorno do ConsultaUltimoPedidoCliente. */
+export function parseUltimoPedido(data: unknown): UltimoPedidoInfo | null {
+  const item = Array.isArray(data) ? data.find(isRecord) : data;
+  if (!isRecord(item)) return null;
+  const p: UltimoPedidoInfo = {
+    numero: str(item.identificador ?? item.identificadorPedido ?? item.id),
+    produto: str(item.produto ?? item.produtoPedido),
+    situacao: str(item.situacao ?? item.situacaoPedido),
+    dataAprovacao: str(item.dataAprovacao ?? item.dataAprovacaoPedido),
+    dataValidade: str(item.dataValidade),
+    valor: numero(item.valorPedido ?? item.valor),
+    protocolo: str(item.protocolo),
+    urlVideoconferencia: limparLink(item.urlVideoconferencia),
+  };
+  if (!p.situacao && !p.numero && !p.produto) return null;
+  return p;
+}
+
+export type UltimoPedidoResult =
+  | { status: "ok"; pedido: UltimoPedidoInfo }
+  | { status: "sem_pedido"; mensagem: string }
+  | ConsultaListaErro;
+
+/** GET /ConsultaUltimoPedidoCliente?cpf= ou ?cnpj= — último pedido do cliente. */
+export async function consultarUltimoPedido(doc: Documento, budget: Budget): Promise<UltimoPedidoResult> {
+  const res = await gfsisRequest("GET", "ConsultaUltimoPedidoCliente", { query: queryDocumento(doc), budget });
+  const negocio = erroNegocio(res.data);
+  const cod = respostaCodigo(res.data);
+  if (res.status === 404 || RE_SEM_PEDIDO.test(negocio) || RE_PEDIDO_NAO_ENCONTRADO.test(negocio) || RE_CLIENTE_NAO_ENCONTRADO.test(negocio) || cod?.codigo === "002") {
+    return { status: "sem_pedido", mensagem: mensagemErroNegocio(res.data) ?? cod?.mensagem ?? "" };
+  }
+  if (RE_CPF_INVALIDO.test(negocio) || res.status === 400) {
+    return { status: "documento_invalido", mensagem: mensagemErroNegocio(res.data) ?? "Documento inválido" };
+  }
+  if (res.status === 200 && !negocio && !cod) {
+    const pedido = parseUltimoPedido(res.data);
+    if (pedido) return { status: "ok", pedido };
+  }
+  return consultaInvalida(res);
 }
 
 /**

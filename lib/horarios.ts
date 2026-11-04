@@ -119,20 +119,9 @@ export function selecionarOpcoes(dias: SlotsDia[], max: number): Opcao[] {
   }));
 }
 
-/** Campos planos + texto pronto para o "retorno livre" da Suri. */
-export function montarRespostaOpcoes(opcoes: Opcao[]): Record<string, unknown> {
-  const data: Record<string, unknown> = {
-    quantidade: opcoes.length,
-    texto:
-      opcoes.map((o) => `${o.numero}) ${o.label}`).join("\n") + "\n\nResponda com o número da opção.",
-  };
-  for (const o of opcoes) {
-    data[`opcao${o.numero}_data`] = o.data;
-    data[`opcao${o.numero}_horario`] = o.horario;
-    data[`opcao${o.numero}_label`] = o.label;
-  }
-  data.opcoes = opcoes;
-  return data;
+/** Mensagem curta do retorno de /horarios: "Encontrei 6 horários". */
+export function mensagemOpcoes(quantidade: number): string {
+  return `Encontrei ${quantidade} ${quantidade === 1 ? "horário" : "horários"}`;
 }
 
 /** Executa tarefas com concorrência limitada, preservando a ordem dos resultados. */
