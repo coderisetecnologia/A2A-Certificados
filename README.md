@@ -240,4 +240,5 @@ A documentação oficial (<https://gfsis.readme.io>) traz exemplos conflitantes.
 
 > ⚠️ **Validar em homologação:** o formato exato da autenticação e o comportamento de `POST /Cliente` para um CPF já existente (atualiza ou retorna `003`) precisam ser confirmados com uma chamada real. Use o botão de teste do painel e confira `error_logs` nos primeiros atendimentos.
 #   A 2 A - C e r t i f i c a d o s  
+ #   A 2 A - C e r t i f i c a d o s  
  
