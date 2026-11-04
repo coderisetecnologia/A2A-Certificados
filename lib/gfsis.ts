@@ -261,14 +261,18 @@ export async function gfsisRequest(method: "GET" | "POST", path: string, opts: R
     }
 
     const { status, text } = result;
+    // O GFSIS responde 401 ou 403 ("Token de acesso não informado.") quando não
+    // aceita o token: nos dois casos, renova o token e repete uma vez.
+    if ((status === 401 || status === 403) && !reauthenticated) {
+      reauthenticated = true;
+      invalidateToken(token);
+      continue;
+    }
     if (status === 401) {
-      if (!reauthenticated) {
-        reauthenticated = true;
-        invalidateToken(token);
-        continue;
-      }
       throw new GfsisError("auth", "Token recusado pelo GFSIS mesmo após reautenticar", endpoint, status, text);
     }
+    // 403 persistente com token novo não é problema de token (ex.: falta de
+    // permissão): segue para o chamador como qualquer outra resposta < 500.
     if (status >= 500) {
       if (retry && attempt === 0 && opts.budget.remaining() > RETRY_MIN_BUDGET_MS) {
         attempt++;

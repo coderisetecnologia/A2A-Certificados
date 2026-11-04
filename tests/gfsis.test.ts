@@ -5,6 +5,7 @@ import {
   consultarCliente,
   criarAgendamento,
   GfsisError,
+  gfsisRequest,
   parseAgendamento,
   parseAuthResponse,
   parseCliente,
@@ -129,6 +130,28 @@ describe("cliente HTTP do GFSIS", () => {
     const r = await consultarCliente("52998224725", new Budget(10_000));
     expect(r.status).toBe("encontrado");
     expect(m.count("POST /auth")).toBe(2);
+  });
+
+  it("em 403 (token não aceito) também reautentica uma vez e repete a chamada", async () => {
+    let n = 0;
+    const m = mockFetch({
+      "POST /auth": () => json({ accessToken: `tok-${++n}`, expirationDate: "2026-11-09 00:30" }, 201),
+      "GET /ConsultaCliente": (c) =>
+        c.headers.get("authorization") === "Bearer tok-1"
+          ? json({ userMessage: "Token de acesso não informado.", developerMessage: "" }, 403)
+          : json({ nome: "Maria", cpf: "52998224725" }),
+    });
+    const r = await consultarCliente("52998224725", new Budget(10_000));
+    expect(r.status).toBe("encontrado");
+    expect(m.count("POST /auth")).toBe(2);
+  });
+
+  it("403 persistente após reautenticar é devolvido ao chamador (sem loop)", async () => {
+    const m = mockFetch({ "POST /auth": authOk, "GET /ConsultaHorarioAgenda": () => json({ userMessage: "Sem permissão" }, 403) });
+    const r = await gfsisRequest("GET", "ConsultaHorarioAgenda", { budget: new Budget(10_000) });
+    expect(r.status).toBe(403);
+    expect(m.count("POST /auth")).toBe(2);
+    expect(m.count("GET /ConsultaHorarioAgenda")).toBe(2);
   });
 
   it("401 persistente vira GfsisError(auth)", async () => {
