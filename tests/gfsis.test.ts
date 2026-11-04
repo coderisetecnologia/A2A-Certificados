@@ -3,6 +3,8 @@ import { Budget } from "@/lib/budget";
 import {
   __resetTokenCache,
   consultarCliente,
+  consultarHorariosDia,
+  consultarProximoAgendamento,
   criarAgendamento,
   GfsisError,
   gfsisRequest,
@@ -11,6 +13,7 @@ import {
   parseCliente,
   parseGfsisErrors,
   parseHorarios,
+  salvarCliente,
 } from "@/lib/gfsis";
 import { mapErroCadastroCliente } from "@/lib/errors";
 import { authOk, json, mockFetch, setTestEnv } from "./helpers";
@@ -209,4 +212,64 @@ describe("cliente HTTP do GFSIS", () => {
     expect(err.kind).toBe("timeout");
     expect(Date.now() - t0).toBeLessThan(2_000);
   }, 10_000);
+});
+
+describe("erros de negócio do GFSIS como HTTP 500 { status: 'error', message }", () => {
+  const erro = (message: string, status = 500) => () => json({ status: "error", message }, status);
+  const AGENDAMENTO = {
+    data: "2026-11-05",
+    horario: "09:00",
+    identificadorPontoAtendimento: 1,
+    videoconferencia: true,
+    cliente: { nome: "Maria", cpf: "52998224725", email: "m@x.com" },
+  };
+
+  it("ConsultaCliente 500 'Cliente não encontrado' → nao_encontrado, sem retry", async () => {
+    const m = mockFetch({ "POST /auth": authOk, "GET /ConsultaCliente": erro("Cliente não encontrado") });
+    expect(await consultarCliente("52998224725", new Budget(10_000))).toEqual({ status: "nao_encontrado" });
+    expect(m.count("GET /ConsultaCliente")).toBe(1);
+  });
+
+  it("ConsultaCliente 500 'CPF inválido' → cpf_invalido", async () => {
+    mockFetch({ "POST /auth": authOk, "GET /ConsultaCliente": erro("CPF inválido") });
+    expect(await consultarCliente("12345678900", new Budget(10_000))).toMatchObject({ status: "cpf_invalido" });
+  });
+
+  it("ConsultaCliente 500 sem o envelope continua sendo falha técnica (com retry)", async () => {
+    const m = mockFetch({ "POST /auth": authOk, "GET /ConsultaCliente": () => new Response("<html>erro</html>", { status: 500 }) });
+    await expect(consultarCliente("52998224725", new Budget(10_000))).rejects.toMatchObject({ kind: "http", status: 500 });
+    expect(m.count("GET /ConsultaCliente")).toBe(2);
+  });
+
+  it("ConsultaAgendamentoCliente 500 'Cliente não possui nenhum agendamento' → null", async () => {
+    mockFetch({ "POST /auth": authOk, "GET /ConsultaAgendamentoCliente": erro("Cliente não possui nenhum agendamento") });
+    expect(await consultarProximoAgendamento("52998224725", new Budget(10_000))).toBeNull();
+  });
+
+  it("ConsultaHorarioAgenda 500 'Ponto de atendimento não encontrado' → ponto_nao_encontrado", async () => {
+    mockFetch({ "POST /auth": authOk, "GET /ConsultaHorarioAgenda": erro("Ponto de atendimento não encontrado") });
+    expect(await consultarHorariosDia("2026-11-05", 999999, new Budget(10_000))).toMatchObject({ status: "ponto_nao_encontrado" });
+  });
+
+  it("ConsultaHorarioAgenda 200 'Nenhum horário disponível' → ok sem horários", async () => {
+    mockFetch({ "POST /auth": authOk, "GET /ConsultaHorarioAgenda": erro("Nenhum horário disponível para essa data", 200) });
+    expect(await consultarHorariosDia("2026-11-08", 1, new Budget(10_000))).toMatchObject({ status: "ok", horarios: [] });
+  });
+
+  it("Agendamento 200 com { status: 'error' } NÃO conta como criado", async () => {
+    mockFetch({ "POST /auth": authOk, "POST /Agendamento": erro("Cliente sem e-mail cadastrado", 200) });
+    expect(await criarAgendamento(AGENDAMENTO, new Budget(10_000))).toMatchObject({ status: "invalido" });
+  });
+
+  it("Agendamento 500 'Horário indisponível' → indisponivel", async () => {
+    mockFetch({ "POST /auth": authOk, "POST /Agendamento": erro("Horário indisponível para agendamento") });
+    expect(await criarAgendamento(AGENDAMENTO, new Budget(10_000))).toMatchObject({ status: "indisponivel" });
+  });
+
+  it("Cliente 500 com envelope vira erro de cadastro com a mensagem (sem retry)", async () => {
+    const m = mockFetch({ "POST /auth": authOk, "POST /Cliente": erro("E-mail inválido") });
+    const r = await salvarCliente({ cpf: "52998224725" }, new Budget(10_000));
+    expect(r).toMatchObject({ status: "erro", httpStatus: 500, erros: [{ mensagem: "E-mail inválido" }] });
+    expect(m.count("POST /Cliente")).toBe(1);
+  });
 });

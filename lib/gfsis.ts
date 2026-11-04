@@ -77,6 +77,31 @@ function tryParseJson(text: string): unknown {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Envelope de erro de negócio do GFSIS: { status: "error", message: "..." }.
+ * Vem com HTTP 500 (cliente/ponto não encontrado, CPF inválido) ou 200
+ * (nenhum horário). Retorna a mensagem, ou null se não for esse formato.
+ */
+export function mensagemErroNegocio(data: unknown): string | null {
+  if (!isRecord(data) || String(data.status).toLowerCase() !== "error") return null;
+  const msg = data.message ?? data.mensagem;
+  return typeof msg === "string" ? msg.trim() : null;
+}
+
+const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const RE_CLIENTE_NAO_ENCONTRADO = /cliente nao (foi )?encontrad/;
+const RE_CPF_INVALIDO = /(cpf|cnpj|documento).*invalid/;
+const RE_SEM_AGENDAMENTO = /(nao possui|nenhum) (nenhum )?agendamento|agendamento nao (foi )?encontrad/;
+const RE_PONTO_NAO_ENCONTRADO = /ponto de atendimento nao (foi )?encontrad/;
+const RE_SEM_HORARIOS = /nenhum horario|sem horario/;
+const RE_HORARIO_INDISPONIVEL = /(horario|data).*(indisponivel|nao (esta )?disponivel|ocupad)|ja existe agendamento/;
+
+/** Mensagem de erro de negócio sem acentos e em minúsculas ("" se não houver). */
+function erroNegocio(data: unknown): string {
+  const m = mensagemErroNegocio(data);
+  return m === null ? "" : semAcento(m);
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -274,6 +299,12 @@ export async function gfsisRequest(method: "GET" | "POST", path: string, opts: R
     // 403 persistente com token novo não é problema de token (ex.: falta de
     // permissão): segue para o chamador como qualquer outra resposta < 500.
     if (status >= 500) {
+      // O GFSIS devolve erros de NEGÓCIO como HTTP 500 com
+      // { status: "error", message } ("Cliente não encontrado", "CPF inválido",
+      // "Ponto de atendimento não encontrado"...). Isso não é queda: sem retry,
+      // a resposta vai para o chamador interpretar pela mensagem.
+      const data = tryParseJson(text);
+      if (mensagemErroNegocio(data) !== null) return { status, data, text, endpoint };
       if (retry && attempt === 0 && opts.budget.remaining() > RETRY_MIN_BUDGET_MS) {
         attempt++;
         await sleep(RETRY_BACKOFF_MS);
@@ -407,7 +438,10 @@ export type ConsultaClienteResult =
 
 export async function consultarCliente(cpf: string, budget: Budget): Promise<ConsultaClienteResult> {
   const res = await gfsisRequest("GET", "ConsultaCliente", { query: { cpf }, budget });
-  if (res.status === 404) return { status: "nao_encontrado" };
+  // O GFSIS responde "Cliente não encontrado" / "CPF inválido" como HTTP 500.
+  const negocio = erroNegocio(res.data);
+  if (res.status === 404 || RE_CLIENTE_NAO_ENCONTRADO.test(negocio)) return { status: "nao_encontrado" };
+  if (RE_CPF_INVALIDO.test(negocio)) return { status: "cpf_invalido", mensagem: mensagemErroNegocio(res.data) ?? "CPF inválido" };
   if (res.status === 400) {
     return { status: "cpf_invalido", mensagem: parseGfsisErrors(res.data, res.text)[0]?.mensagem ?? "CPF inválido" };
   }
@@ -445,7 +479,7 @@ export async function salvarCliente(payload: ClientePayload, budget: Budget): Pr
   if (res.status >= 200 && res.status < 300) {
     const id = isRecord(res.data) ? str(res.data.id) || null : null;
     // Alguns endpoints do GFSIS retornam 200 com { erro: true }.
-    if (isRecord(res.data) && (res.data.erro === true || Array.isArray(res.data.erros))) {
+    if (isRecord(res.data) && (res.data.erro === true || Array.isArray(res.data.erros) || mensagemErroNegocio(res.data) !== null)) {
       return { status: "erro", httpStatus: res.status, erros: parseGfsisErrors(res.data, res.text), text: res.text };
     }
     return { status: "ok", id };
@@ -463,8 +497,11 @@ export async function consultarHorariosDia(data: string, ponto: number, budget: 
     query: { data, identificadorPontoAtendimento: ponto },
     budget,
   });
-  if (res.status === 200) return { status: "ok", ...parseHorarios(res.data ?? res.text) };
-  if (res.status === 404) return { status: "ponto_nao_encontrado", text: res.text };
+  const negocio = erroNegocio(res.data);
+  if (res.status === 404 || RE_PONTO_NAO_ENCONTRADO.test(negocio)) return { status: "ponto_nao_encontrado", text: res.text };
+  // "Nenhum horário disponível para essa data" vem como 200 { status: "error", message }.
+  if (RE_SEM_HORARIOS.test(negocio)) return { status: "ok", horarios: [], mensagem: mensagemErroNegocio(res.data) ?? undefined };
+  if (res.status === 200 && !negocio) return { status: "ok", ...parseHorarios(res.data ?? res.text) };
   return {
     status: "invalido",
     httpStatus: res.status,
@@ -480,7 +517,10 @@ export async function consultarProximoAgendamento(
   opts: { timeoutMs?: number; retry?: boolean } = {},
 ): Promise<AgendamentoInfo | null> {
   const res = await gfsisRequest("GET", "ConsultaAgendamentoCliente", { query: { cpf }, budget, ...opts });
+  // "Cliente não possui nenhum agendamento" / "CPF inválido" vêm como HTTP 500.
+  const negocio = erroNegocio(res.data);
   if (res.status === 404) return null;
+  if (RE_SEM_AGENDAMENTO.test(negocio) || RE_CLIENTE_NAO_ENCONTRADO.test(negocio) || RE_CPF_INVALIDO.test(negocio)) return null;
   if (res.status === 200) return parseAgendamento(res.data);
   if (res.status === 400) return null; // CPF inválido p/ GFSIS: tratado antes pela nossa validação
   throw new GfsisError("http", `Status inesperado ${res.status}`, res.endpoint, res.status, res.text);
@@ -528,7 +568,11 @@ export async function criarAgendamento(
   const res = await gfsisRequest("POST", "Agendamento", { body: payload, budget, retry: false, timeoutMs });
   const erros = parseGfsisErrors(res.data, res.text);
   const mensagem = erros[0]?.mensagem ?? "";
-  if (res.status === 200 || res.status === 201) {
+  const negocio = erroNegocio(res.data);
+  if (RE_PONTO_NAO_ENCONTRADO.test(negocio)) return { status: "ponto_nao_encontrado", mensagem, text: res.text };
+  if (RE_HORARIO_INDISPONIVEL.test(negocio)) return { status: "indisponivel", mensagem: mensagem || "Horário não disponível" };
+  // Um 200/201 com { status: "error" } NÃO é agendamento criado.
+  if ((res.status === 200 || res.status === 201) && !negocio) {
     const ag = parseAgendamento(res.data);
     if (ag) return { status: "criado", agendamento: ag, mensagem: isRecord(res.data) ? str(res.data.mensagem) || undefined : undefined };
     return { status: "criado", agendamento: { id: null, data: payload.data, horario: payload.horario } };
