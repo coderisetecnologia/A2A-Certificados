@@ -6,7 +6,15 @@ import Google from "next-auth/providers/google";
 import { isAllowedGoogleProfile } from "@/lib/auth";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  providers: [Google],
+  // trim(): valores colados no painel da Vercel com espaço no fim geram
+  // "OAuth client was not found" (invalid_client) no Google.
+  providers: [
+    Google({
+      clientId: process.env.AUTH_GOOGLE_ID?.trim(),
+      clientSecret: process.env.AUTH_GOOGLE_SECRET?.trim(),
+    }),
+  ],
+  secret: process.env.AUTH_SECRET?.trim(),
   session: { strategy: "jwt", maxAge: 8 * 60 * 60 },
   trustHost: true,
   pages: {
