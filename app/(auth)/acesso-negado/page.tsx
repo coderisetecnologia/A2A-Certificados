@@ -13,8 +13,13 @@ export default async function AcessoNegadoPage({ searchParams }: { searchParams:
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
           {negado
             ? "Esta conta Google não tem permissão para acessar o painel."
-            : "Não foi possível concluir o login. Tente novamente."}
+            : error === "Configuration"
+              ? "O login está com a configuração do servidor incompleta. Verifique as variáveis de ambiente do Auth.js."
+              : "Não foi possível concluir o login. Tente novamente."}
         </p>
+        {!negado && error && (
+          <p className="mt-2 font-mono text-xs text-slate-400">Código: {error.slice(0, 40)}</p>
+        )}
         <Link
           href="/login"
           className="mt-6 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"

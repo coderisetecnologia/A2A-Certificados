@@ -31,10 +31,18 @@ export interface GfsisConfig {
   pontoAtendimentoId: number;
 }
 
+/** Aceita "a2a" ou a URL completa ("https://a2a.gfsis.com.br/gestaofacil/rest"). */
+export function parseGfsisSubdomain(raw: string): string | null {
+  const v = raw.trim();
+  if (/^[a-z0-9-]+$/i.test(v)) return v.toLowerCase();
+  const m = v.match(/^(?:https?:\/\/)?([a-z0-9-]+)\.gfsis\.com\.br(?:[/:?#].*)?$/i);
+  return m?.[1]?.toLowerCase() ?? null;
+}
+
 export function gfsisConfig(): GfsisConfig {
-  const subdomain = required("GFSIS_SUBDOMAIN");
-  if (!/^[a-z0-9-]+$/i.test(subdomain)) {
-    throw new ConfigError("GFSIS_SUBDOMAIN inválido (use apenas o subdomínio, ex.: 'a2a')");
+  const subdomain = parseGfsisSubdomain(required("GFSIS_SUBDOMAIN"));
+  if (!subdomain) {
+    throw new ConfigError("GFSIS_SUBDOMAIN inválido (use o subdomínio, ex.: 'a2a', ou a URL https://a2a.gfsis.com.br)");
   }
   const ponto = Number.parseInt(required("GFSIS_PONTO_ATENDIMENTO_ID"), 10);
   if (!Number.isFinite(ponto)) throw new ConfigError("GFSIS_PONTO_ATENDIMENTO_ID deve ser numérico");

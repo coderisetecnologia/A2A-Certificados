@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { parseDiasAtendimento } from "@/lib/env";
+import { parseDiasAtendimento, parseGfsisSubdomain } from "@/lib/env";
+
+describe("GFSIS_SUBDOMAIN", () => {
+  it("aceita subdomínio puro ou URL completa", () => {
+    expect(parseGfsisSubdomain("a2a")).toBe("a2a");
+    expect(parseGfsisSubdomain("https://a2a.gfsis.com.br/gestaofacil/rest")).toBe("a2a");
+    expect(parseGfsisSubdomain("https://Minha-AR.gfsis.com.br/gestaofacil/rest/auth")).toBe("minha-ar");
+    expect(parseGfsisSubdomain("a2a.gfsis.com.br")).toBe("a2a");
+    expect(parseGfsisSubdomain("https://evil.com/a2a.gfsis.com.br")).toBeNull();
+  });
+});
 import {
   descartarPassados,
   filtrarPorPeriodo,
