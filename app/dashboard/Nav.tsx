@@ -5,13 +5,15 @@ import { usePathname } from "next/navigation";
 
 const LINKS = [
   { href: "/dashboard", label: "Erros" },
+  { href: "/dashboard/testes", label: "Testes" },
+  { href: "/dashboard/implantacao", label: "Implantação Suri" },
   { href: "/dashboard/configuracoes", label: "Configurações" },
 ];
 
 export function Nav() {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-1">
+    <nav className="flex flex-wrap gap-1">
       {LINKS.map((l) => {
         const ativo = pathname === l.href;
         return (

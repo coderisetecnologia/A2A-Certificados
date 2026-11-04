@@ -21,7 +21,7 @@ import {
   validarFormato,
   type DadosCliente,
 } from "@/lib/cliente";
-import { gfsisConfig } from "@/lib/env";
+import { resolverPontoAtendimento } from "@/lib/env";
 import { getRegrasNegocio } from "@/lib/settings";
 import { failure, MSG_GFSIS_INDISPONIVEL, success, type HandlerResult } from "@/lib/errors";
 import {
@@ -147,7 +147,7 @@ export const POST = suriHandler("/api/suri/agendar", schema, async (input, ctx) 
   if (invalido) return invalido;
   const cpf = novo.cpf!;
   const videoconferencia = input.videoconferencia ?? true;
-  const ponto = input.identificadorPontoAtendimento ?? gfsisConfig().pontoAtendimentoId;
+  const ponto = resolverPontoAtendimento(input.identificadorPontoAtendimento);
 
   // 2. Idempotência: já existe agendamento igual?
   try {

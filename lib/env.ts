@@ -28,7 +28,6 @@ export interface GfsisConfig {
   baseUrl: string;
   username: string;
   password: string;
-  pontoAtendimentoId: number;
 }
 
 /** Aceita "a2a" ou a URL completa ("https://a2a.gfsis.com.br/gestaofacil/rest"). */
@@ -44,14 +43,35 @@ export function gfsisConfig(): GfsisConfig {
   if (!subdomain) {
     throw new ConfigError("GFSIS_SUBDOMAIN inválido (use o subdomínio, ex.: 'a2a', ou a URL https://a2a.gfsis.com.br)");
   }
-  const ponto = Number.parseInt(required("GFSIS_PONTO_ATENDIMENTO_ID"), 10);
-  if (!Number.isFinite(ponto)) throw new ConfigError("GFSIS_PONTO_ATENDIMENTO_ID deve ser numérico");
   return {
     baseUrl: `https://${subdomain}.gfsis.com.br/gestaofacil/rest`,
     username: required("GFSIS_USER"),
     password: required("GFSIS_PASSWORD"),
-    pontoAtendimentoId: ponto,
   };
+}
+
+/** Ponto de atendimento padrão, ou null se GFSIS_PONTO_ATENDIMENTO_ID estiver vazio. */
+export function pontoAtendimentoPadrao(): number | null {
+  const raw = process.env.GFSIS_PONTO_ATENDIMENTO_ID?.trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) throw new ConfigError("GFSIS_PONTO_ATENDIMENTO_ID deve ser um número inteiro positivo");
+  return n;
+}
+
+/**
+ * Ponto usado em horários/agendamento: o enviado na requisição ou o padrão.
+ * Só essas rotas precisam dele; autenticação e rotas de cliente funcionam sem.
+ */
+export function resolverPontoAtendimento(informado?: number): number {
+  if (informado !== undefined) return informado;
+  const padrao = pontoAtendimentoPadrao();
+  if (padrao === null) {
+    throw new ConfigError(
+      "GFSIS_PONTO_ATENDIMENTO_ID não configurado e identificadorPontoAtendimento não enviado na requisição",
+    );
+  }
+  return padrao;
 }
 
 /** Retorna null quando não configurada (as rotas falham fechadas com 401). */

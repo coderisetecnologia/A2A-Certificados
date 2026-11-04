@@ -114,8 +114,8 @@ Todas as rotas da Suri são `POST` com JSON, header `x-api-key` e prefixo `/api/
 
 1. Peça a um administrador do GFSIS da AR que crie um **usuário administrador marcado com a flag "usuário integração"**. Esse usuário não acessa a interface do GFSIS; serve apenas para a API. Há um passo a passo em <https://gfsis.readme.io/reference/autenticação-1>.
 2. Anote o **login** (`GFSIS_USER`), a **senha** (`GFSIS_PASSWORD`) e o **subdomínio** da instância (`GFSIS_SUBDOMAIN`). Por exemplo, `a2a` em `https://a2a.gfsis.com.br`.
-3. Descubra o **identificador do ponto de atendimento** (filial) usado nos agendamentos online (`GFSIS_PONTO_ATENDIMENTO_ID`). Confirme com o suporte do GFSIS (suporte@gfsis.com.br) se não souber.
-4. Depois do deploy, use o botão **"Testar conexão com o GFSIS"** no painel. Ele valida as credenciais e o ponto de atendimento.
+3. Descubra o **identificador do ponto de atendimento** (filial) usado nos agendamentos online (`GFSIS_PONTO_ATENDIMENTO_ID`). Ele só é exigido pelo GFSIS em `ConsultaHorarioAgenda` e `Agendamento`; autenticação e rotas de cliente funcionam sem ele. Para descobrir, use a aba **Testes** do painel (Consultar horários com `identificadorPontoAtendimento` no corpo: um ponto inexistente responde `PONTO_NAO_ENCONTRADO`) ou confirme com o suporte do GFSIS (suporte@gfsis.com.br).
+4. Depois do deploy, use o botão **"Testar conexão com o GFSIS"** no painel. Ele valida as credenciais e, se configurado, o ponto de atendimento. Em seguida, use as abas **Testes** (executa cada função como a Suri) e **Implantação Suri** (passo a passo do flow).
 
 ### 2. Banco Neon (somente erros)
 
@@ -157,7 +157,7 @@ Veja [.env.example](.env.example). Resumo:
 |---|---|---|
 | `GFSIS_SUBDOMAIN` | ✔ | Subdomínio do GFSIS |
 | `GFSIS_USER` / `GFSIS_PASSWORD` | ✔ | Usuário integração |
-| `GFSIS_PONTO_ATENDIMENTO_ID` | ✔ | Ponto de atendimento padrão (pode ser sobrescrito no body) |
+| `GFSIS_PONTO_ATENDIMENTO_ID` | — | Ponto de atendimento padrão. Só é usado em horários e agendamento (pode ser sobrescrito no body). Sem ele, essas duas rotas exigem `identificadorPontoAtendimento` no body |
 | `SURI_API_KEY` | ✔ | Chave do header `x-api-key` (`openssl rand -hex 32`) |
 | `DATABASE_URL` | ✔ | Neon (pooled) |
 | `AUTH_SECRET` | ✔ | Segredo do Auth.js |

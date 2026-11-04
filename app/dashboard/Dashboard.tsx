@@ -112,10 +112,11 @@ export function Dashboard() {
     setTeste(null);
     try {
       const res = await fetch("/api/admin/gfsis-test", { method: "POST" });
-      const json = (await res.json()) as { ok: boolean; message: string; authMs?: number; consultaMs?: number };
+      const json = (await res.json()) as { ok: boolean; message: string; authMs?: number; consultaMs?: number | null };
+      const tempos = json.consultaMs == null ? `auth ${json.authMs}ms` : `auth ${json.authMs}ms, agenda ${json.consultaMs}ms`;
       setTeste({
         ok: json.ok,
-        message: json.ok ? `${json.message} (auth ${json.authMs}ms, agenda ${json.consultaMs}ms)` : json.message,
+        message: json.ok ? `${json.message} (${tempos})` : json.message,
       });
     } catch {
       setTeste({ ok: false, message: "Não foi possível executar o teste." });

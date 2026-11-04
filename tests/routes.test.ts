@@ -293,3 +293,35 @@ describe("/cliente/salvar", () => {
     expect(logs[0]).toMatchObject({ errorCode: "GFSIS_008", route: "/api/suri/cliente/salvar" });
   });
 });
+
+describe("GFSIS_PONTO_ATENDIMENTO_ID opcional", () => {
+  beforeEach(() => {
+    delete process.env.GFSIS_PONTO_ATENDIMENTO_ID;
+  });
+
+  it("consultar cliente funciona sem ponto configurado", async () => {
+    captureErrorLogs();
+    mockFetch({ "POST /auth": authOk, "GET /ConsultaCliente": () => json(CLIENTE_GFSIS) });
+    const r = await callRoute(consultar, { cpf: CPF });
+    expect(r.body).toMatchObject({ ok: true, code: "OK", data: { encontrado: true } });
+  });
+
+  it("horarios sem ponto (nem no env nem no body) → CONFIGURACAO_INVALIDA sem chamar o GFSIS", async () => {
+    captureErrorLogs();
+    const m = mockFetch({ "POST /auth": authOk });
+    const r = await callRoute(horarios, { periodo: "manha" });
+    expect(r.status).toBe(500);
+    expect(r.body).toMatchObject({ ok: false, code: "CONFIGURACAO_INVALIDA" });
+    expect(m.calls.some((c) => c.path === "/ConsultaHorarioAgenda")).toBe(false);
+  });
+
+  it("horarios usa identificadorPontoAtendimento do body quando não há padrão", async () => {
+    captureErrorLogs();
+    const m = mockFetch({
+      "POST /auth": authOk,
+      "GET /ConsultaHorarioAgenda": () => json({ horariosDisponiveis: ["11:00"] }),
+    });
+    await callRoute(horarios, { periodo: "manha", dias: 1, identificadorPontoAtendimento: "77" });
+    expect(m.calls.find((c) => c.path === "/ConsultaHorarioAgenda")!.query.get("identificadorPontoAtendimento")).toBe("77");
+  });
+});

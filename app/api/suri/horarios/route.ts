@@ -3,7 +3,7 @@
  * filtra pelo período e devolve opções numeradas + campos planos para a Suri.
  */
 import { z } from "zod";
-import { gfsisConfig } from "@/lib/env";
+import { resolverPontoAtendimento } from "@/lib/env";
 import { getRegrasNegocio } from "@/lib/settings";
 import { failure, success, type LoggableError } from "@/lib/errors";
 import { consultarHorariosDia, GfsisError, type HorariosDiaResult } from "@/lib/gfsis";
@@ -48,7 +48,7 @@ export const POST = suriHandler("/api/suri/horarios", schema, async (input, ctx)
   const periodo = input.periodo as Periodo;
   const dias = input.dias ?? 5;
   const maxOpcoes = input.maxOpcoes ?? 6;
-  const ponto = input.identificadorPontoAtendimento ?? gfsisConfig().pontoAtendimentoId;
+  const ponto = resolverPontoAtendimento(input.identificadorPontoAtendimento);
   const regras = await getRegrasNegocio();
   const antecedencia = regras.antecedenciaMinimaMinutos;
   const agora = nowInTz(regras.tzNegocio);

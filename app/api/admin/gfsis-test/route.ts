@@ -1,11 +1,12 @@
 /**
- * "Testar conexão com o GFSIS": força autenticação e consulta a agenda do
- * próximo dia de atendimento. Não devolve dados do GFSIS, só sucesso/falha.
+ * "Testar conexão com o GFSIS": força autenticação e, se houver ponto de
+ * atendimento configurado, consulta a agenda do próximo dia de atendimento.
+ * Não devolve dados do GFSIS, só sucesso/falha.
  */
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin";
 import { Budget } from "@/lib/budget";
-import { ConfigError, suriTimeoutMs } from "@/lib/env";
+import { ConfigError, pontoAtendimentoPadrao, suriTimeoutMs } from "@/lib/env";
 import { getRegrasNegocio } from "@/lib/settings";
 import { GfsisError, testarConexao } from "@/lib/gfsis";
 import { logEvent } from "@/lib/log";
@@ -22,15 +23,18 @@ export async function POST() {
   const hoje = nowInTz(regras.tzNegocio).date;
   const data = proximosDiasAtendimento(addDays(hoje, 1), 1, new Set(regras.diasAtendimento))[0] ?? addDays(hoje, 1);
   try {
-    const r = await testarConexao(new Budget(suriTimeoutMs()), data);
-    const ok = r.status === "ok";
+    const r = await testarConexao(new Budget(suriTimeoutMs()), data, pontoAtendimentoPadrao());
+    const ok = r.status === "ok" || r.status === "sem_ponto";
     const mensagens: Record<string, string> = {
       ok: "Conexão OK: autenticação e consulta de agenda funcionando.",
+      sem_ponto:
+        "Autenticação OK. GFSIS_PONTO_ATENDIMENTO_ID não está configurado, então a agenda não foi testada (horários e agendamento vão falhar sem ele).",
       ponto_nao_encontrado: "Autenticação OK, mas o ponto de atendimento configurado não foi encontrado.",
       invalido: "Autenticação OK, mas a consulta de agenda foi recusada pelo GFSIS.",
     };
     return NextResponse.json({
       ok,
+      aviso: r.status === "sem_ponto",
       message: mensagens[r.status] ?? "Resultado inesperado",
       authMs: r.authMs,
       consultaMs: r.consultaMs,

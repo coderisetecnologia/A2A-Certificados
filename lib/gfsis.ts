@@ -534,12 +534,20 @@ export async function criarAgendamento(
   return { status: "invalido", httpStatus: res.status, mensagem, erros, text: res.text };
 }
 
-/** Teste de conexão para o painel: força autenticação e faz uma consulta simples. */
-export async function testarConexao(budget: Budget, data: string): Promise<{ authMs: number; consultaMs: number; status: string }> {
+/**
+ * Teste de conexão para o painel: força autenticação e, se houver ponto de
+ * atendimento, faz uma consulta de agenda. Sem ponto, testa só a autenticação.
+ */
+export async function testarConexao(
+  budget: Budget,
+  data: string,
+  ponto: number | null,
+): Promise<{ authMs: number; consultaMs: number | null; status: string }> {
   const t0 = Date.now();
   await getToken(budget, true);
   const authMs = Date.now() - t0;
+  if (ponto === null) return { authMs, consultaMs: null, status: "sem_ponto" };
   const t1 = Date.now();
-  const r = await consultarHorariosDia(data, gfsisConfig().pontoAtendimentoId, budget);
+  const r = await consultarHorariosDia(data, ponto, budget);
   return { authMs, consultaMs: Date.now() - t1, status: r.status };
 }
