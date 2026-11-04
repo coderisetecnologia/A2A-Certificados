@@ -239,3 +239,5 @@ A documentação oficial (<https://gfsis.readme.io>) traz exemplos conflitantes.
 | `POST /Cliente` | Erros como `{erro, codigo, mensagem}` **ou** `{erros:[{codigo, mensagem}]}`. O código `003` ("já existe cliente com o CPF") vira `CLIENTE_JA_CADASTRADO` com `ok:true` e é registrado para conferência. |
 
 > ⚠️ **Validar em homologação:** o formato exato da autenticação e o comportamento de `POST /Cliente` para um CPF já existente (atualiza ou retorna `003`) precisam ser confirmados com uma chamada real. Use o botão de teste do painel e confira `error_logs` nos primeiros atendimentos.
+#   A 2 A - C e r t i f i c a d o s  
+ 
