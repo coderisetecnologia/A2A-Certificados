@@ -1,0 +1,83 @@
+{
+  "info": {
+    "name": "Suri x GFSIS (CodeRise)",
+    "description": "Endpoints consumidos pelos flows da Suri. Configure as variáveis da coleção baseUrl e suriApiKey.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "suriApiKey", "value": "troque-pela-chave" },
+    { "key": "cronSecret", "value": "troque-pelo-segredo" }
+  ],
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "key", "value": "x-api-key", "type": "string" },
+      { "key": "value", "value": "{{suriApiKey}}", "type": "string" },
+      { "key": "in", "value": "header", "type": "string" }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "url": "{{baseUrl}}/api/suri/health"
+      }
+    },
+    {
+      "name": "3 - Consultar cliente",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/suri/cliente/consultar",
+        "body": { "mode": "raw", "raw": "{\n  \"cpf\": \"529.982.247-25\"\n}" }
+      }
+    },
+    {
+      "name": "4 - Salvar cliente",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/suri/cliente/salvar",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cpf\": \"52998224725\",\n  \"nome\": \"Maria Souza\",\n  \"email\": \"maria.souza@gmail.com\",\n  \"telefone\": \"+55 (85) 99999-8888\",\n  \"dataNascimento\": \"15/04/1985\",\n  \"cep\": \"60110-001\",\n  \"numero\": \"100\"\n}"
+        }
+      }
+    },
+    {
+      "name": "5/6 - Horários",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/suri/horarios",
+        "body": { "mode": "raw", "raw": "{\n  \"periodo\": \"manha\",\n  \"dias\": 5,\n  \"maxOpcoes\": 6\n}" }
+      }
+    },
+    {
+      "name": "7/8 - Agendar",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/suri/agendar",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"data\": \"2026-09-16\",\n  \"horario\": \"09:00\",\n  \"cliente\": {\n    \"cpf\": \"52998224725\",\n    \"nome\": \"Maria Souza\",\n    \"email\": \"maria.souza@gmail.com\",\n    \"telefone\": \"85999998888\",\n    \"cep\": \"60110-001\",\n    \"numero\": \"100\"\n  },\n  \"videoconferencia\": true,\n  \"observacao\": \"Agendamento via WhatsApp (Suri)\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Cron - limpeza (manual)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{cronSecret}}", "type": "string" }]
+        },
+        "method": "GET",
+        "url": "{{baseUrl}}/api/cron/cleanup"
+      }
+    }
+  ]
+}

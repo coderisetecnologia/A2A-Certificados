@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "app/api/suri/horarios/route.ts": { "maxDuration": 20 },
+    "app/api/suri/agendar/route.ts": { "maxDuration": 20 },
+    "app/api/suri/cliente/salvar/route.ts": { "maxDuration": 20 },
+    "app/api/suri/cliente/consultar/route.ts": { "maxDuration": 20 }
+  },
+  "crons": [
+    { "path": "/api/cron/cleanup", "schedule": "0 9 * * *" }
+  ]
+}
