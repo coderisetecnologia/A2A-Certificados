@@ -64,7 +64,7 @@
         "url": "{{baseUrl}}/api/suri/agendar",
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"data\": \"2026-09-16\",\n  \"horario\": \"09:00\",\n  \"cliente\": {\n    \"cpf\": \"52998224725\",\n    \"nome\": \"Maria Souza\",\n    \"email\": \"maria.souza@gmail.com\",\n    \"telefone\": \"85999998888\",\n    \"cep\": \"60110-001\",\n    \"numero\": \"100\"\n  },\n  \"videoconferencia\": true,\n  \"observacao\": \"Agendamento via WhatsApp (Suri)\"\n}"
+          "raw": "{\n  \"horarioEscolhido\": \"16/09 (Quarta) 09:00\",\n  \"cliente\": {\n    \"cpf\": \"52998224725\",\n    \"nome\": \"Maria Souza\",\n    \"email\": \"maria.souza@gmail.com\",\n    \"telefone\": \"85999998888\",\n    \"cep\": \"60110-001\",\n    \"numero\": \"100\"\n  },\n  \"videoconferencia\": true,\n  \"observacao\": \"Agendamento via WhatsApp (Suri)\"\n}"
         }
       }
     },

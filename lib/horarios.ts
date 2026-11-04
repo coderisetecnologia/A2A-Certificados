@@ -124,6 +124,50 @@ export function mensagemOpcoes(quantidade: number): string {
   return `Encontrei ${quantidade} ${quantidade === 1 ? "horário" : "horários"}`;
 }
 
+/**
+ * Separa data e horário de um valor único escolhido no flow — normalmente o
+ * próprio `label` da opção ("06/11 (Sexta) 08:40"). Também aceita
+ * "06/11/2026 08:40", "2026-11-06 08:40", "2026-11-06T08:40" e prefixo
+ * numérico ("1) 06/11 (Sexta) 08:40"). Sem ano, usa a próxima ocorrência da
+ * data a partir de `hoje` (ex.: "05/01" em dezembro → janeiro do ano seguinte).
+ */
+export function separarDataHorario(valor: unknown, hoje: string): { data: string | null; horario: string | null } {
+  const s = String(valor ?? "").trim();
+  let data: string | null = null;
+  let resto = s;
+
+  const iso = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  const br = iso ? null : s.match(/(?<!\d)(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?(?!\d)/);
+  if (iso) {
+    data = valida(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+    resto = s.replace(iso[0], " ");
+  } else if (br) {
+    const d = Number(br[1]);
+    const m = Number(br[2]);
+    if (br[3]) {
+      data = valida(br[3].length === 2 ? 2000 + Number(br[3]) : Number(br[3]), m, d);
+    } else {
+      const ano = Number(hoje.slice(0, 4));
+      data = valida(ano, m, d);
+      if (data && data < hoje) data = valida(ano + 1, m, d);
+    }
+    resto = s.replace(br[0], " ");
+  }
+
+  const hm = resto.match(/(?<!\d)(\d{1,2})\s*[:h]\s*(\d{2})(?!\d)/i);
+  let horario: string | null = null;
+  if (hm && Number(hm[1]) <= 23 && Number(hm[2]) <= 59) {
+    horario = `${hm[1]!.padStart(2, "0")}:${hm[2]}`;
+  }
+  return { data, horario };
+}
+
+function valida(y: number, m: number, d: number): string | null {
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 /** Executa tarefas com concorrência limitada, preservando a ordem dos resultados. */
 export async function mapWithConcurrency<T, R>(
   items: T[],

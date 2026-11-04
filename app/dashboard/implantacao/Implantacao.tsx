@@ -133,7 +133,7 @@ export function Implantacao({
         "numero_endereco: texto",
         "complemento: texto (opcional)",
         "periodo: texto (manha, tarde ou noite)",
-        "data_escolhida e horario_escolhido: texto",
+        "horario_escolhido: texto (label da opção escolhida, ex. 06/11 (Sexta) 08:40)",
         "numero_pedido: texto (consulta de situação do pedido)",
         "Variáveis de apoio do flow: gfsis_code, cliente_encontrado, cadastro_completo, falta_nascimento, falta_endereco, falta_email, horarios_mensagem, horarios_opcoes, mensagem_confirmacao, id_agendamento, correlation_id",
       ],
@@ -242,9 +242,8 @@ export function Implantacao({
       titulo: "Receber a escolha do cliente (etapa 6)",
       resumo: "Não há chamada à API aqui: é lógica do flow.",
       itens: [
-        "Aguarde a resposta numérica do cliente.",
-        "Valide que o número existe em data.opcoes (de 1 até a quantidade de itens). Se não existir, peça de novo.",
-        "Pegue o item escolhido de data.opcoes (posição número − 1) e copie data para data_escolhida e horario para horario_escolhido.",
+        "Com lista/botões da Suri (Ver opções): use o label de cada item como texto da opção e salve a resposta em horario_escolhido. A API separa data e horário no /agendar.",
+        "Com resposta numérica: valide que o número existe em data.opcoes e salve o label do item (posição número − 1) em horario_escolhido.",
         "Opcional: confirme com o cliente usando o label do item escolhido antes de agendar.",
       ],
     },
@@ -252,11 +251,10 @@ export function Implantacao({
       id: "agendar",
       titulo: "Criar o agendamento (etapas 7–8)",
       resumo:
-        "Só data, horario e cliente.cpf são obrigatórios. O que faltar é completado com o cadastro do GFSIS e o ViaCEP. Pode reenviar sem medo: se o mesmo agendamento já existir, a resposta é JA_AGENDADO e nada é duplicado.",
+        "Só horarioEscolhido (ou data + horario separados) e cliente.cpf são obrigatórios. O que faltar é completado com o cadastro do GFSIS e o ViaCEP. Pode reenviar sem medo: se o mesmo agendamento já existir, a resposta é JA_AGENDADO e nada é duplicado.",
       rota: "/agendar",
       body: {
-        data: "@User.Variables.data_escolhida",
-        horario: "@User.Variables.horario_escolhido",
+        horarioEscolhido: "@User.Variables.horario_escolhido",
         cliente: {
           cpf: "@User.IdentificationDocument",
           nome: "@User.Name",

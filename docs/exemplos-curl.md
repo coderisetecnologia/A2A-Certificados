@@ -64,8 +64,7 @@ curl -s -X POST "$BASE_URL/api/suri/agendar" \
   -H "x-api-key: $SURI_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "data": "2026-09-16",
-    "horario": "09:00",
+    "horarioEscolhido": "16/09 (Quarta) 09:00",
     "cliente": {
       "cpf": "52998224725",
       "nome": "Maria Souza",

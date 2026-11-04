@@ -1,7 +1,8 @@
 /**
  * Etapas 7–8 — cria o agendamento no GFSIS.
  *
- * 1. Valida data/horário no fuso do negócio e o CPF.
+ * 1. Valida data/horário no fuso do negócio e o CPF. Aceita `horarioEscolhido`
+ *    único (label da opção, ex. "06/11 (Sexta) 08:40") e separa data e horário.
  * 2. Idempotência sem banco: se o próximo agendamento do cliente já é o mesmo
  *    (data+horário), devolve JA_AGENDADO em vez de criar outro.
  * 3. Completa dados do cliente com o cadastro do GFSIS e ViaCEP.
@@ -35,15 +36,20 @@ import {
 } from "@/lib/gfsis";
 import { maskEmail } from "@/lib/mask";
 import { cleanText, formatCep, normalizeData, normalizeHorario } from "@/lib/normalize";
+import { separarDataHorario } from "@/lib/horarios";
 import { suriHandler, type SuriContext } from "@/lib/suri-handler";
 import { formatDataCurta, nowInTz, toMinutes } from "@/lib/time";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const textoOpcional = z.preprocess((v) => cleanText(v), z.string().max(300).optional());
+
 const schema = z.object({
-  data: textoObrigatorio("data"),
-  horario: textoObrigatorio("horario"),
+  /** Valor único da opção escolhida (ex.: o label "06/11 (Sexta) 08:40"). Tem prioridade sobre data/horario. */
+  horarioEscolhido: textoOpcional,
+  data: textoOpcional,
+  horario: textoOpcional,
   cliente: clienteCamposSchema.extend({ cpf: textoObrigatorio("cliente.cpf") }),
   videoconferencia: booleano,
   observacao: z.preprocess((v) => cleanText(v), z.string().max(500).optional()),
@@ -119,13 +125,15 @@ async function verificarAposFalha(
 }
 
 export const POST = suriHandler("/api/suri/agendar", schema, async (input, ctx) => {
-  const data = normalizeData(input.data);
-  if (!data) return failure("DATA_INVALIDA", "Não entendi a data escolhida. Vou buscar os horários novamente.");
-  const horario = normalizeHorario(input.horario);
-  if (!horario) return failure("HORARIO_INVALIDO", "Não entendi o horário escolhido. Vou buscar os horários novamente.");
-
   const { tzNegocio } = await getRegrasNegocio();
   const agora = nowInTz(tzNegocio);
+
+  const separado = input.horarioEscolhido ? separarDataHorario(input.horarioEscolhido, agora.date) : null;
+  const data = separado ? separado.data : normalizeData(input.data);
+  if (!data) return failure("DATA_INVALIDA", "Não entendi a data escolhida. Vou buscar os horários novamente.");
+  const horario = separado ? separado.horario : normalizeHorario(input.horario);
+  if (!horario) return failure("HORARIO_INVALIDO", "Não entendi o horário escolhido. Vou buscar os horários novamente.");
+
   if (data < agora.date || (data === agora.date && toMinutes(horario) <= agora.minutes)) {
     return failure("HORARIO_INDISPONIVEL", "Esse horário já passou. Vou buscar novas opções para você.", {
       reconsultar: true,

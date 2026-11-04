@@ -244,6 +244,28 @@ describe("/agendar", () => {
     expect(logs).toHaveLength(1); // falha técnica registrada mesmo recuperada
   });
 
+  it("aceita horarioEscolhido único (label da opção) e separa data e horário", async () => {
+    captureErrorLogs();
+    const m = mockFetch({
+      "POST /auth": authOk,
+      "GET /ConsultaAgendamentoCliente": () => json({}, 404),
+      "GET /ConsultaCliente": () => json(CLIENTE_GFSIS),
+      "POST /Agendamento": () => json({ idAgendamento: 1000, data: "2026-09-16", horario: "09:00" }, 201),
+    });
+    const { data: _d, horario: _h, ...semCampos } = body;
+    const r = await callRoute(agendar, { ...semCampos, horarioEscolhido: "16/09 (Quarta) 09:00" });
+    expect(r.body).toMatchObject({ ok: true, code: "OK", data: { idAgendamento: "1000" } });
+    expect(m.calls.find((c) => c.path === "/Agendamento")!.body).toMatchObject({ data: "2026-09-16", horario: "09:00" });
+  });
+
+  it("horarioEscolhido ilegível → DATA_INVALIDA sem chamar o GFSIS", async () => {
+    captureErrorLogs();
+    const m = mockFetch({});
+    const r = await callRoute(agendar, { cliente: body.cliente, horarioEscolhido: "quero de manhã" });
+    expect(r.body).toMatchObject({ ok: false, code: "DATA_INVALIDA" });
+    expect(m.calls).toHaveLength(0);
+  });
+
   it("horário que já passou hoje → HORARIO_INDISPONIVEL sem chamar o GFSIS", async () => {
     captureErrorLogs();
     const m = mockFetch({});

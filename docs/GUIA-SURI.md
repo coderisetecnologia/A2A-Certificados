@@ -253,9 +253,10 @@ O retorno traz só o necessário: `message` com a quantidade ("Encontrei N horá
 
 **Escolha do cliente (etapa 6):**
 
-1. Envie `horarios_mensagem` e as opções, uma por item de `data.opcoes`, no formato `{numero}) {label}` (ou como botões/lista da Suri). Aguarde a resposta numérica.
-2. Valide que o número existe em `data.opcoes` (de 1 até a quantidade de itens). Se não existir, peça de novo.
-3. Pegue o item escolhido (posição `número − 1`) e copie `data` para `data_escolhida` e `horario` para `horario_escolhido`.
+- **Com lista/botões da Suri ("Ver opções"):** use o `label` de cada item como texto da opção e salve a resposta do cliente em `horario_escolhido` (ex.: "06/11 (Sexta) 08:40"). Não precisa separar data e horário: a API faz isso em `/agendar`.
+- **Com resposta numérica:** envie as opções no formato `{numero}) {label}`, valide que o número existe em `data.opcoes` e salve o `label` do item escolhido (posição `número − 1`) em `horario_escolhido`.
+
+`horario_escolhido` aceita o `label` ("06/11 (Sexta) 08:40"), "06/11/2026 08:40" ou "2026-11-06 08:40". Quando o valor não traz o ano, a API usa a próxima ocorrência da data.
 
 **Ramificação:**
 
@@ -272,8 +273,7 @@ Body:
 
 ```json
 {
-  "data": "@User.Variables.data_escolhida",
-  "horario": "@User.Variables.horario_escolhido",
+  "horarioEscolhido": "@User.Variables.horario_escolhido",
   "cliente": {
     "cpf": "@User.IdentificationDocument",
     "nome": "@User.Name",
@@ -286,6 +286,8 @@ Body:
   "observacao": "Agendamento via WhatsApp (Suri)"
 }
 ```
+
+> `horarioEscolhido` é o valor único da opção ("06/11 (Sexta) 08:40"); a API separa data e horário antes de enviar ao GFSIS. Se preferir, ainda é possível enviar `data` e `horario` separados. Quando `horarioEscolhido` vem preenchido, ele tem prioridade. Valor ilegível → `DATA_INVALIDA` ou `HORARIO_INVALIDO`: busque os horários novamente.
 
 - Só `data`, `horario` e `cliente.cpf` são obrigatórios. O que faltar (nome, e-mail, endereço) é completado com o cadastro do GFSIS e o ViaCEP.
 - `videoconferencia` tem padrão `true` (mockup: "Local: Online (link será enviado por e-mail)").

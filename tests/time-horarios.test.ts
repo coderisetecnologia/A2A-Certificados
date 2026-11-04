@@ -17,6 +17,7 @@ import {
   periodoDoHorario,
   planejarDias,
   selecionarOpcoes,
+  separarDataHorario,
 } from "@/lib/horarios";
 import { formatDataCurta, nowInTz, proximosDiasAtendimento, weekdayOf } from "@/lib/time";
 
@@ -129,6 +130,17 @@ describe("opções numeradas", () => {
   it("respeita o máximo e o total disponível", () => {
     expect(selecionarOpcoes([{ data: "2026-09-15", horarios: ["09:00"] }], 6)).toHaveLength(1);
     expect(selecionarOpcoes([], 6)).toEqual([]);
+  });
+
+  it("separa data e horário de um valor único", () => {
+    const hoje = "2026-11-04";
+    expect(separarDataHorario("06/11 (Sexta) 08:40", hoje)).toEqual({ data: "2026-11-06", horario: "08:40" });
+    expect(separarDataHorario("1) 06/11 (Sexta) 8h40", hoje)).toEqual({ data: "2026-11-06", horario: "08:40" });
+    expect(separarDataHorario("06/11/2026 08:40", hoje)).toEqual({ data: "2026-11-06", horario: "08:40" });
+    expect(separarDataHorario("2026-11-06T08:40", hoje)).toEqual({ data: "2026-11-06", horario: "08:40" });
+    expect(separarDataHorario("05/01 (Terça) 09:00", "2026-12-20")).toEqual({ data: "2027-01-05", horario: "09:00" });
+    expect(separarDataHorario("31/02 09:00", hoje).data).toBeNull();
+    expect(separarDataHorario("06/11", hoje).horario).toBeNull();
   });
 
   it("monta a mensagem curta com a quantidade", () => {
