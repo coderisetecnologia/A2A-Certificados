@@ -26,7 +26,7 @@ import {
 } from "@/lib/cliente";
 import { resolverPontoAtendimento } from "@/lib/env";
 import { getRegrasNegocio } from "@/lib/settings";
-import { failure, MSG_GFSIS_INDISPONIVEL, success, type HandlerResult } from "@/lib/errors";
+import { failure, success, type HandlerResult } from "@/lib/errors";
 import {
   consultarCliente,
   consultarProximoAgendamento,
@@ -37,6 +37,7 @@ import {
 import { maskEmail } from "@/lib/mask";
 import { cleanText, formatCep, normalizeData, normalizeHorario } from "@/lib/normalize";
 import { separarDataHorario } from "@/lib/horarios";
+import { msg } from "@/lib/mensagens";
 import { suriHandler, type SuriContext } from "@/lib/suri-handler";
 import { formatDataCurta, nowInTz, toMinutes } from "@/lib/time";
 
@@ -112,12 +113,12 @@ async function verificarAposFalha(
     }
     return failure(
       "GFSIS_INDISPONIVEL",
-      "Não consegui confirmar seu agendamento agora. Um atendente vai verificar e retornar para você.",
+      msg("agendar.nao_confirmado"),
       {},
       { ...errorLog, message: `${err.message} — verificação: agendamento NÃO encontrado` },
     );
   } catch (e) {
-    return failure("GFSIS_INDISPONIVEL", MSG_GFSIS_INDISPONIVEL, {}, {
+    return failure("GFSIS_INDISPONIVEL", msg("geral.gfsis_indisponivel"), {}, {
       ...errorLog,
       message: `${err.message} — verificação também falhou: ${(e as Error).message}`,
     });
@@ -130,12 +131,12 @@ export const POST = suriHandler("/api/suri/agendar", schema, async (input, ctx) 
 
   const separado = input.horarioEscolhido ? separarDataHorario(input.horarioEscolhido, agora.date) : null;
   const data = separado ? separado.data : normalizeData(input.data);
-  if (!data) return failure("DATA_INVALIDA", "Não entendi a data escolhida. Vou buscar os horários novamente.");
+  if (!data) return failure("DATA_INVALIDA", msg("agendar.data_invalida"));
   const horario = separado ? separado.horario : normalizeHorario(input.horario);
-  if (!horario) return failure("HORARIO_INVALIDO", "Não entendi o horário escolhido. Vou buscar os horários novamente.");
+  if (!horario) return failure("HORARIO_INVALIDO", msg("agendar.horario_invalido"));
 
   if (data < agora.date || (data === agora.date && toMinutes(horario) <= agora.minutes)) {
-    return failure("HORARIO_INDISPONIVEL", "Esse horário já passou. Vou buscar novas opções para você.", {
+    return failure("HORARIO_INDISPONIVEL", msg("agendar.horario_passou"), {
       reconsultar: true,
     });
   }
@@ -153,7 +154,7 @@ export const POST = suriHandler("/api/suri/agendar", schema, async (input, ctx) 
     if (mesmoAgendamento(proximo, data, horario)) {
       ctx.log("agendamento.ja_existente");
       return success(
-        `Você já tem um agendamento em ${formatDataCurta(data)} às ${horario}.`,
+        msg("agendar.ja_agendado", { data: formatDataCurta(data), horario }),
         dadosConfirmacao({ idAgendamento: proximo?.id ?? null, data, horario, videoconferencia, emailMascarado: maskEmail(novo.email) }),
         "JA_AGENDADO",
       );
@@ -174,13 +175,14 @@ export const POST = suriHandler("/api/suri/agendar", schema, async (input, ctx) 
   const faltantes = camposFaltantes(cliente, false); // data de nascimento não é exigida no agendamento
   if (faltantes.length > 0) {
     const code = faltantes.includes("nome") ? "NOME_OBRIGATORIO" : faltantes.includes("email") ? "EMAIL_OBRIGATORIO" : "ENDERECO_INCOMPLETO";
-    const msg =
+    const message = msg(
       code === "NOME_OBRIGATORIO"
-        ? "Preciso do seu nome completo para concluir o agendamento."
+        ? "agendar.nome_obrigatorio"
         : code === "EMAIL_OBRIGATORIO"
-          ? "Preciso do seu e-mail para enviar o link da reunião."
-          : "Preciso do seu CEP e número do endereço para concluir o agendamento.";
-    return failure(code, msg, { camposFaltantes: faltantes.join(",") }, {
+          ? "agendar.email_obrigatorio"
+          : "agendar.endereco_incompleto",
+    );
+    return failure(code, message, { camposFaltantes: faltantes.join(",") }, {
       step: "agendar_dados_incompletos",
       errorCode: code,
       message: `Campos faltantes para agendar: ${faltantes.join(",")}`,
@@ -192,7 +194,7 @@ export const POST = suriHandler("/api/suri/agendar", schema, async (input, ctx) 
   const emailMascarado = maskEmail(cliente.email);
   const confirmar = (id: string | null = null) =>
     success(
-      "Agendamento confirmado!",
+      msg("agendar.confirmado"),
       dadosConfirmacao({ idAgendamento: id, data, horario, videoconferencia, emailMascarado }),
     );
 
@@ -214,11 +216,11 @@ export const POST = suriHandler("/api/suri/agendar", schema, async (input, ctx) 
     case "indisponivel":
       return failure(
         "HORARIO_INDISPONIVEL",
-        "Esse horário acabou de ser preenchido. Vou buscar outras opções para você.",
+        msg("agendar.horario_preenchido"),
         { reconsultar: true },
       );
     case "ponto_nao_encontrado":
-      return failure("PONTO_NAO_ENCONTRADO", "Não consegui concluir o agendamento agora. Vou encaminhar você para um atendente.", {}, {
+      return failure("PONTO_NAO_ENCONTRADO", msg("agendar.erro"), {}, {
         step: "criar_agendamento",
         gfsisEndpoint: "POST /Agendamento",
         httpStatus: 404,
@@ -231,8 +233,8 @@ export const POST = suriHandler("/api/suri/agendar", schema, async (input, ctx) 
       return failure(
         municipio ? "ENDERECO_INVALIDO" : "GFSIS_ERRO_AGENDAMENTO",
         municipio
-          ? "Não consegui validar o município do seu endereço. Pode me enviar seu CEP novamente?"
-          : "Não consegui concluir o agendamento agora. Vou encaminhar você para um atendente.",
+          ? msg("agendar.municipio_invalido")
+          : msg("agendar.erro"),
         {},
         {
           step: "criar_agendamento",

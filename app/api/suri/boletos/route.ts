@@ -8,6 +8,7 @@ import { dadosBoletos, falhaConsulta, MAX_ITENS, SEM_BOLETOS_DATA } from "@/lib/
 import { documentoCampos, falhaDocumentoInvalido, resolverDocumento } from "@/lib/documento";
 import { success } from "@/lib/errors";
 import { consultarBoletosAbertos } from "@/lib/gfsis";
+import { msg } from "@/lib/mensagens";
 import { suriHandler } from "@/lib/suri-handler";
 
 export const runtime = "nodejs";
@@ -30,7 +31,7 @@ export const POST = suriHandler("/api/suri/boletos", schema, async (input, ctx) 
       return success(String(data.texto), data);
     }
     case "sem_boletos":
-      return success("Você não tem boletos em aberto no momento. 🎉", SEM_BOLETOS_DATA, "SEM_BOLETOS");
+      return success(msg("boletos.nenhum"), SEM_BOLETOS_DATA, "SEM_BOLETOS");
     case "documento_invalido":
       return falhaDocumentoInvalido(doc.documento.tipo, SEM_BOLETOS_DATA);
     case "invalido":

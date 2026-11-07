@@ -8,6 +8,7 @@ import { dadosNotasFiscais, falhaConsulta, SEM_NOTA_DATA } from "@/lib/consultas
 import { documentoCampos, falhaDocumentoInvalido, resolverDocumento } from "@/lib/documento";
 import { success } from "@/lib/errors";
 import { consultarNotasFiscais } from "@/lib/gfsis";
+import { msg } from "@/lib/mensagens";
 import { suriHandler } from "@/lib/suri-handler";
 
 export const runtime = "nodejs";
@@ -28,12 +29,12 @@ export const POST = suriHandler("/api/suri/nota-fiscal", schema, async (input, c
     }
     case "nao_gerada":
       return success(
-        "Sua nota fiscal ainda não foi gerada. Ela fica disponível após a emissão do certificado.",
+        msg("nota.nao_gerada"),
         SEM_NOTA_DATA,
         "NOTA_FISCAL_NAO_GERADA",
       );
     case "sem_nota":
-      return success("Não encontrei nota fiscal vinculada ao seu cadastro.", SEM_NOTA_DATA, "SEM_NOTA_FISCAL");
+      return success(msg("nota.nenhuma"), SEM_NOTA_DATA, "SEM_NOTA_FISCAL");
     case "documento_invalido":
       return falhaDocumentoInvalido(doc.documento.tipo, SEM_NOTA_DATA);
     case "invalido":

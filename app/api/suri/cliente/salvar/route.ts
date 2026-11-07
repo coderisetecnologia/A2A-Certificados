@@ -20,6 +20,7 @@ import { consultarCliente, salvarCliente } from "@/lib/gfsis";
 import { primeiroNome } from "@/lib/normalize";
 import { getRegrasNegocio } from "@/lib/settings";
 import { nowInTz } from "@/lib/time";
+import { msg } from "@/lib/mensagens";
 import { suriHandler } from "@/lib/suri-handler";
 
 export const runtime = "nodejs";
@@ -42,13 +43,13 @@ export const POST = suriHandler("/api/suri/cliente/salvar", schema, async (input
   const { cliente: completo, viacep } = await completarEndereco(cliente, ctx.budget);
   cliente = completo;
   if (viacep === "nao_encontrado" && novo.cep) {
-    return failure("CEP_INVALIDO", "Não encontrei esse CEP. Pode conferir e enviar novamente?");
+    return failure("CEP_INVALIDO", msg("salvar.cep_nao_encontrado"));
   }
   if (viacep === "falha") ctx.log("viacep.falha");
   if (novo.cep && viacep !== "falha" && (!cliente.logradouro || !cliente.bairro)) {
     return failure(
       "ENDERECO_INCOMPLETO",
-      "Esse CEP é geral da cidade. Pode me informar o nome da rua e o bairro?",
+      msg("salvar.cep_geral"),
       { camposFaltantes: camposFaltantes(cliente).join(",") },
     );
   }
@@ -58,7 +59,7 @@ export const POST = suriHandler("/api/suri/cliente/salvar", schema, async (input
 
   if (r.status === "ok") {
     ctx.log("cliente.salvo", { novo: !base, viacep });
-    return success("Cadastro atualizado com sucesso.", {
+    return success(msg("salvar.ok"), {
       primeiroNome: primeiroNome(cliente.nome),
       cadastroCompleto: faltantes.length === 0,
       camposFaltantes: faltantes.join(","),

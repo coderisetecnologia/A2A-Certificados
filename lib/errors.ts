@@ -3,6 +3,8 @@
  * Formato sempre: { ok, code, message, data }.
  */
 import type { GfsisErroItem } from "./gfsis";
+import { msg } from "./mensagens";
+import type { MensagemChave } from "./mensagens-catalogo";
 
 export type SuriCode =
   | "OK"
@@ -82,53 +84,34 @@ export function failure(
   return { ok: false, code, message, data, errorLog };
 }
 
-export const MSG_GFSIS_INDISPONIVEL =
-  "Nosso sistema de agendamento está instável no momento. Vou encaminhar você para um atendente.";
-
 interface MapeamentoErro {
   ok: boolean;
   code: SuriCode;
   message: string;
 }
 
-const ERROS_CADASTRO: Record<string, MapeamentoErro> = {
-  "001": { ok: false, code: "CPF_OBRIGATORIO", message: "Preciso do seu CPF para continuar." },
-  "003": {
-    ok: true,
-    code: "CLIENTE_JA_CADASTRADO",
-    message: "Seu cadastro já existe no nosso sistema. Vamos seguir com o agendamento.",
-  },
-  "007": { ok: false, code: "CPF_INVALIDO", message: "O CPF informado não é válido. Pode conferir e enviar novamente?" },
-  "008": {
-    ok: false,
-    code: "DATA_NASCIMENTO_OBRIGATORIA",
-    message: "Preciso da sua data de nascimento (no formato dd/mm/aaaa).",
-  },
-  "009": { ok: false, code: "NOME_OBRIGATORIO", message: "Preciso do seu nome completo." },
-  "010": { ok: false, code: "EMAIL_OBRIGATORIO", message: "Preciso do seu e-mail para enviar o link da reunião." },
-  "011": { ok: false, code: "TELEFONE_INVALIDO", message: "O telefone informado parece inválido. Pode enviar novamente com DDD?" },
-  "012": {
-    ok: false,
-    code: "ENDERECO_INVALIDO",
-    message: "Não consegui validar seu endereço. Pode me enviar seu CEP novamente?",
-  },
-  "013": {
-    ok: false,
-    code: "ENDERECO_INVALIDO",
-    message: "Não encontrei o município do seu endereço. Pode me enviar seu CEP novamente?",
-  },
+const ERROS_CADASTRO: Record<string, { ok: boolean; code: SuriCode; chave: MensagemChave }> = {
+  "001": { ok: false, code: "CPF_OBRIGATORIO", chave: "salvar.gfsis_001" },
+  "003": { ok: true, code: "CLIENTE_JA_CADASTRADO", chave: "salvar.gfsis_003" },
+  "007": { ok: false, code: "CPF_INVALIDO", chave: "salvar.gfsis_007" },
+  "008": { ok: false, code: "DATA_NASCIMENTO_OBRIGATORIA", chave: "salvar.gfsis_008" },
+  "009": { ok: false, code: "NOME_OBRIGATORIO", chave: "salvar.gfsis_009" },
+  "010": { ok: false, code: "EMAIL_OBRIGATORIO", chave: "salvar.gfsis_010" },
+  "011": { ok: false, code: "TELEFONE_INVALIDO", chave: "salvar.gfsis_011" },
+  "012": { ok: false, code: "ENDERECO_INVALIDO", chave: "salvar.gfsis_012" },
+  "013": { ok: false, code: "ENDERECO_INVALIDO", chave: "salvar.gfsis_013" },
 };
 
 /** Converte os códigos de erro do POST /Cliente em códigos estáveis para o flow. */
 export function mapErroCadastroCliente(erros: GfsisErroItem[]): MapeamentoErro & { gfsisCodigo?: string } {
   for (const e of erros) {
     const m = e.codigo ? ERROS_CADASTRO[e.codigo] : undefined;
-    if (m) return { ...m, gfsisCodigo: e.codigo };
+    if (m) return { ok: m.ok, code: m.code, message: msg(m.chave), gfsisCodigo: e.codigo };
   }
   return {
     ok: false,
     code: "GFSIS_ERRO_CADASTRO",
-    message: "Não consegui atualizar seu cadastro agora. Vou encaminhar você para um atendente.",
+    message: msg("salvar.erro_gfsis"),
     gfsisCodigo: erros[0]?.codigo,
   };
 }

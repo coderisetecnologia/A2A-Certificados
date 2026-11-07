@@ -7,6 +7,7 @@ import { dadosProximoAgendamento, SEM_AGENDAMENTO_DATA } from "@/lib/consultas";
 import { documentoCampos, resolverDocumento } from "@/lib/documento";
 import { success } from "@/lib/errors";
 import { consultarProximoAgendamento } from "@/lib/gfsis";
+import { msg } from "@/lib/mensagens";
 import { suriHandler } from "@/lib/suri-handler";
 
 export const runtime = "nodejs";
@@ -22,7 +23,7 @@ export const POST = suriHandler("/api/suri/agendamento/proximo", schema, async (
   if (!ag?.data) {
     ctx.log("agendamento.proximo_nenhum", { tipoDocumento: doc.documento.tipo });
     return success(
-      "Não encontrei nenhum agendamento futuro no seu cadastro. Quer agendar um horário?",
+      msg("proximo.nenhum"),
       SEM_AGENDAMENTO_DATA,
       "SEM_AGENDAMENTO",
     );

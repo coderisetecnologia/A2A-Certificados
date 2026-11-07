@@ -7,6 +7,7 @@
 import { z } from "zod";
 import { isValidCpf, onlyDigits } from "./cpf";
 import { failure, type HandlerResult } from "./errors";
+import { msg } from "./mensagens";
 import { cleanText } from "./normalize";
 
 export type TipoDocumento = "cpf" | "cnpj";
@@ -90,13 +91,9 @@ export interface EntradaDocumento {
   cnpj?: string;
 }
 
-export const MSG_CPF_INVALIDO = "O CPF informado não é válido. Pode conferir e enviar novamente?";
-export const MSG_CNPJ_INVALIDO = "O CNPJ informado não é válido. Pode conferir e enviar novamente?";
-export const MSG_DOCUMENTO_INVALIDO = "O CPF ou CNPJ informado não é válido. Pode conferir e enviar novamente?";
-
 export function falhaDocumentoInvalido(tipo: TipoDocumento | null, data: Record<string, unknown> = {}): HandlerResult {
-  if (tipo === "cnpj") return failure("CNPJ_INVALIDO", MSG_CNPJ_INVALIDO, data);
-  return failure("CPF_INVALIDO", tipo === "cpf" ? MSG_CPF_INVALIDO : MSG_DOCUMENTO_INVALIDO, data);
+  if (tipo === "cnpj") return failure("CNPJ_INVALIDO", msg("documento.cnpj_invalido"), data);
+  return failure("CPF_INVALIDO", msg(tipo === "cpf" ? "documento.cpf_invalido" : "documento.invalido"), data);
 }
 
 /**
@@ -111,7 +108,7 @@ export function resolverDocumento(
   if (!bruto) {
     return {
       ok: false,
-      result: failure("DADOS_INVALIDOS", "Preciso do seu CPF ou CNPJ para continuar.", { ...data, campos: "documento" }, {
+      result: failure("DADOS_INVALIDOS", msg("documento.ausente"), { ...data, campos: "documento" }, {
         step: "validacao",
         errorCode: "DOCUMENTO_AUSENTE",
         message: "Nenhum dos campos documento, cpf ou cnpj foi enviado (ou a variável da Suri estava vazia)",

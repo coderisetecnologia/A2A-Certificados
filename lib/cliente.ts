@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Budget } from "./budget";
 import { isValidCpf, normalizeCpf } from "./cpf";
 import { failure, type HandlerResult } from "./errors";
+import { msg } from "./mensagens";
 import type { ClienteGfsis, ClientePayload } from "./gfsis";
 import { cleanText, formatCep, isValidEmail, normalizeCep, normalizeData, normalizeTelefone, slug } from "./normalize";
 import { buscarCep } from "./viacep";
@@ -196,26 +197,26 @@ export function montarPayloadCliente(c: DadosCliente): ClientePayload {
  */
 export function validarFormato(c: Partial<DadosCliente>, hoje: string): HandlerResult | null {
   if (!c.cpf || !isValidCpf(c.cpf)) {
-    return failure("CPF_INVALIDO", "O CPF informado não é válido. Pode conferir e enviar novamente?");
+    return failure("CPF_INVALIDO", msg("documento.cpf_invalido"));
   }
   if (c.email && !isValidEmail(c.email)) {
-    return failure("EMAIL_INVALIDO", "O e-mail informado parece inválido. Pode enviar novamente?");
+    return failure("EMAIL_INVALIDO", msg("cliente.email_invalido"));
   }
   if (c.telefone && (c.telefone.length < 10 || c.telefone.length > 11)) {
-    return failure("TELEFONE_INVALIDO", "O telefone informado parece inválido. Pode enviar novamente com DDD?");
+    return failure("TELEFONE_INVALIDO", msg("cliente.telefone_invalido"));
   }
   if (c.dataNascimento) {
     const iso = normalizeData(c.dataNascimento);
     const anoMin = Number(hoje.slice(0, 4)) - 120;
     if (!iso || iso >= hoje || Number(iso.slice(0, 4)) < anoMin) {
-      return failure("DATA_NASCIMENTO_INVALIDA", "A data de nascimento parece inválida. Envie no formato dd/mm/aaaa.");
+      return failure("DATA_NASCIMENTO_INVALIDA", msg("cliente.data_nascimento_invalida"));
     }
   }
   if (c.cep && c.cep.length !== 8) {
-    return failure("CEP_INVALIDO", "O CEP precisa ter 8 dígitos. Pode enviar novamente?");
+    return failure("CEP_INVALIDO", msg("cliente.cep_tamanho"));
   }
   if (c.uf && !/^[A-Z]{2}$/.test(c.uf)) {
-    return failure("ENDERECO_INVALIDO", "A UF do endereço parece inválida. Pode me enviar seu CEP novamente?");
+    return failure("ENDERECO_INVALIDO", msg("cliente.uf_invalida"));
   }
   return null;
 }

@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
   let res: NextResponse;
 
   if (entrada.rota === "health") {
-    res = health();
+    res = await health();
   } else {
     const key = suriApiKey();
     if (!key) {

@@ -15,6 +15,7 @@ import { resolverUnidade } from "@/lib/env";
 import { failure, success } from "@/lib/errors";
 import { consultarSituacaoPedido, consultarUltimoPedido } from "@/lib/gfsis";
 import { cleanText } from "@/lib/normalize";
+import { msg } from "@/lib/mensagens";
 import { suriHandler } from "@/lib/suri-handler";
 
 export const runtime = "nodejs";
@@ -27,14 +28,11 @@ const schema = z.object({
   considerarPedidosInternos: booleano,
 });
 
-const MSG_NAO_ENCONTRADO =
-  "Não encontrei esse pedido. Pode conferir o número e enviar novamente? Se preferir, falo com um atendente.";
-
 export const POST = suriHandler("/api/suri/pedido/situacao", schema, async (input, ctx) => {
   const temDocumento = !!(input.documento ?? input.cpf ?? input.cnpj);
 
   if (!input.numeroPedido && !temDocumento) {
-    return failure("DADOS_INVALIDOS", "Preciso do número do pedido ou do seu CPF/CNPJ para consultar.", {
+    return failure("DADOS_INVALIDOS", msg("pedido.sem_identificacao"), {
       campos: "numeroPedido,documento",
     }, {
       step: "validacao",
@@ -52,7 +50,7 @@ export const POST = suriHandler("/api/suri/pedido/situacao", schema, async (inpu
     const digitos = input.numeroPedido.replace(/\D/g, "");
     const numero = Number(digitos);
     if (!digitos || digitos.length > 12 || !Number.isSafeInteger(numero) || numero < 1) {
-      return failure("PEDIDO_INVALIDO", "Não entendi o número do pedido. Envie apenas os números, por favor.");
+      return failure("PEDIDO_INVALIDO", msg("pedido.numero_invalido"));
     }
     const unidade = resolverUnidade(input.identificadorUnidade);
     const r = await consultarSituacaoPedido(
@@ -61,13 +59,13 @@ export const POST = suriHandler("/api/suri/pedido/situacao", schema, async (inpu
     );
     if (r.status === "nao_encontrado") {
       ctx.log("pedido.nao_encontrado");
-      return failure("PEDIDO_NAO_ENCONTRADO", MSG_NAO_ENCONTRADO);
+      return failure("PEDIDO_NAO_ENCONTRADO", msg("pedido.nao_encontrado"));
     }
     if (r.status === "invalido") return falhaConsulta("consultar_pedido", "GET /ConsultaPedidoVendaLTS", r);
 
     if (documento && r.pedido.documentoCliente && r.pedido.documentoCliente !== documento.numero) {
       ctx.log("pedido.documento_divergente");
-      return failure("PEDIDO_NAO_ENCONTRADO", MSG_NAO_ENCONTRADO);
+      return failure("PEDIDO_NAO_ENCONTRADO", msg("pedido.nao_encontrado"));
     }
     ctx.log("pedido.encontrado", { origem: "numero" });
     const data = dadosPedido(r.pedido);
@@ -83,7 +81,7 @@ export const POST = suriHandler("/api/suri/pedido/situacao", schema, async (inpu
       return success(String(data.mensagemPedido), data);
     }
     case "sem_pedido":
-      return success("Não encontrei nenhum pedido no seu cadastro.", { origem: "ultimo_pedido", numeroPedido: "" }, "SEM_PEDIDO");
+      return success(msg("pedido.nenhum"), { origem: "ultimo_pedido", numeroPedido: "" }, "SEM_PEDIDO");
     case "documento_invalido":
       return falhaDocumentoInvalido(documento!.tipo);
     case "invalido":

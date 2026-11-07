@@ -20,6 +20,7 @@ import {
   type SlotsDia,
 } from "@/lib/horarios";
 import { cleanText, normalizeData, slug } from "@/lib/normalize";
+import { msg } from "@/lib/mensagens";
 import { suriHandler } from "@/lib/suri-handler";
 import { nowInTz } from "@/lib/time";
 
@@ -57,7 +58,7 @@ export const POST = suriHandler("/api/suri/horarios", schema, async (input, ctx)
   let dataInicial: string | null = null;
   if (input.dataInicial) {
     dataInicial = normalizeData(input.dataInicial);
-    if (!dataInicial) return failure("DATA_INVALIDA", "Não entendi a data informada. Use o formato dd/mm/aaaa.");
+    if (!dataInicial) return failure("DATA_INVALIDA", msg("horarios.data_invalida"));
   }
 
   const datas = planejarDias({ agora, dataInicial, dias, diasAtendimento: new Set(regras.diasAtendimento), periodo, antecedenciaMin: antecedencia });
@@ -80,7 +81,7 @@ export const POST = suriHandler("/api/suri/horarios", schema, async (input, ctx)
     if (v.status === "ponto_nao_encontrado") {
       return failure(
         "PONTO_NAO_ENCONTRADO",
-        "Não consegui consultar a agenda agora. Vou encaminhar você para um atendente.",
+        msg("horarios.ponto_nao_encontrado"),
         {},
         {
           step: "consultar_horarios",
@@ -129,7 +130,7 @@ export const POST = suriHandler("/api/suri/horarios", schema, async (input, ctx)
     const outros = (["manha", "tarde", "noite"] as const).filter((p) => p !== periodo).map((p) => PERIODO_LABEL[p]);
     const r = failure(
       "SEM_HORARIOS",
-      `Não encontrei horários disponíveis no período da ${PERIODO_LABEL[periodo]} nos próximos dias. Quer tentar outro período (${outros.join(" ou ")})?`,
+      msg("horarios.sem_horarios", { periodo: PERIODO_LABEL[periodo], outrosPeriodos: outros.join(" ou ") }),
       { opcoes: [] },
     );
     return erroValidacao ? { ...r, errorLog: erroValidacao } : r;

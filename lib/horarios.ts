@@ -2,6 +2,7 @@
  * Regras puras de horários: filtro por período, descarte de horários
  * passados no dia de hoje e montagem das opções numeradas para a Suri.
  */
+import { msg } from "./mensagens";
 import { addDays, formatDataCurta, proximosDiasAtendimento, toMinutes, type LocalNow } from "./time";
 
 export type Periodo = "manha" | "tarde" | "noite";
@@ -121,7 +122,7 @@ export function selecionarOpcoes(dias: SlotsDia[], max: number): Opcao[] {
 
 /** Mensagem curta do retorno de /horarios: "Encontrei 6 horários". */
 export function mensagemOpcoes(quantidade: number): string {
-  return `Encontrei ${quantidade} ${quantidade === 1 ? "horário" : "horários"}`;
+  return msg(quantidade === 1 ? "horarios.encontrado_um" : "horarios.encontrados", { quantidade });
 }
 
 /**

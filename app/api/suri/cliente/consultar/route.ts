@@ -10,6 +10,7 @@ import { success } from "@/lib/errors";
 import { consultarCliente } from "@/lib/gfsis";
 import { maskEmail, maskTelefone } from "@/lib/mask";
 import { primeiroNome } from "@/lib/normalize";
+import { msg } from "@/lib/mensagens";
 import { suriHandler } from "@/lib/suri-handler";
 
 export const runtime = "nodejs";
@@ -42,7 +43,7 @@ export const POST = suriHandler("/api/suri/cliente/consultar", schema, async (in
   if (r.status === "nao_encontrado") {
     ctx.log("cliente.nao_encontrado", { tipoDocumento: documento.tipo });
     return success(
-      "Cliente não encontrado no cadastro.",
+      msg("consultar.nao_encontrado"),
       {
         encontrado: false,
         tipoDocumento: documento.tipo,
@@ -63,7 +64,7 @@ export const POST = suriHandler("/api/suri/cliente/consultar", schema, async (in
   const nome = pessoaFisica ? primeiroNome(cliente.nome) : cliente.nome;
   ctx.log("cliente.encontrado", { tipoDocumento: documento.tipo, cadastroCompleto: faltantes.length === 0 });
 
-  return success(nome ? `Encontrei seu cadastro, ${nome}!` : "Encontrei seu cadastro!", {
+  return success(nome ? msg("consultar.encontrado_nome", { nome }) : msg("consultar.encontrado"), {
     encontrado: true,
     tipoDocumento: documento.tipo,
     pessoaFisica,

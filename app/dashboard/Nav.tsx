@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/dashboard", label: "Erros" },
   { href: "/dashboard/testes", label: "Testes" },
   { href: "/dashboard/implantacao", label: "Implantação Suri" },
+  { href: "/dashboard/mensagens", label: "Mensagens" },
   { href: "/dashboard/configuracoes", label: "Configurações" },
 ];
 

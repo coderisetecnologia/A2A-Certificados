@@ -8,7 +8,8 @@
 --
 -- O banco guarda APENAS:
 --   1. error_logs   → erros técnicos e validações do GFSIS (sucessos não são gravados)
---   2. app_settings → regras de negócio editadas no painel (/dashboard/configuracoes)
+--   2. app_settings → regras de negócio (/dashboard/configuracoes) e
+--                     mensagens personalizadas da Suri (/dashboard/mensagens)
 -- ============================================================================
 
 -- gen_random_uuid() é nativo a partir do Postgres 13 (o Neon já atende).
@@ -61,6 +62,12 @@ CREATE INDEX IF NOT EXISTS error_logs_correlation_idx ON error_logs (correlation
 --     "antecedenciaMinimaMinutos": 30 }
 -- Sem registro aqui, a aplicação usa as variáveis de ambiente
 -- TZ_NEGOCIO, DIAS_ATENDIMENTO e ANTECEDENCIA_MINIMA_MINUTOS.
+--
+-- Chave 'mensagens' — só as mensagens que diferem do texto padrão
+--   { "agendar.confirmado": "Prontinho, agendado! ✅",
+--     "consultar.encontrado_nome": "Oi, {nome}! Achei seu cadastro." }
+-- Os textos padrão e as chaves ficam em lib/mensagens-catalogo.ts.
+-- Sem registro (ou apagando-o), todas voltam ao texto padrão.
 CREATE TABLE IF NOT EXISTS app_settings (
   key         text        PRIMARY KEY,
   value       jsonb       NOT NULL,
@@ -68,7 +75,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
   updated_by  text                                   -- e-mail de quem alterou no painel
 );
 
-COMMENT ON TABLE app_settings IS 'Configurações editadas no painel (ex.: regras_negocio).';
+COMMENT ON TABLE app_settings IS 'Configurações editadas no painel (ex.: regras_negocio, mensagens).';
 
 -- (Opcional) Valores iniciais das regras de negócio.
 -- Deixe comentado para usar as variáveis de ambiente como padrão e editar

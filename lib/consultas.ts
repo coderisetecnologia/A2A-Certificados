@@ -3,6 +3,7 @@
  * boletos e pedidos) em campos planos e textos prontos para o WhatsApp.
  */
 import { failure, type HandlerResult } from "./errors";
+import { msg } from "./mensagens";
 import type { AgendamentoInfo, BoletoInfo, ConsultaInvalida, NotaFiscalInfo, PedidoInfo, UltimoPedidoInfo } from "./gfsis";
 import { normalizeData } from "./normalize";
 import { formatDataBr, formatDataCurta } from "./time";
@@ -12,7 +13,7 @@ export function falhaConsulta(
   step: string,
   gfsisEndpoint: string,
   r: ConsultaInvalida,
-  message = "Não consegui fazer essa consulta agora. Vou encaminhar você para um atendente.",
+  message = msg("geral.consulta_falhou"),
 ): HandlerResult {
   return failure("GFSIS_ERRO_CONSULTA", message, {}, {
     step,
@@ -51,7 +52,7 @@ export function dadosProximoAgendamento(ag: AgendamentoInfo & { data: string }):
     dataFormatada: formatDataCurta(ag.data),
     dataCompleta: formatDataBr(ag.data),
     horario,
-    mensagemAgendamento: `📅 Seu próximo agendamento é ${quando}.`,
+    mensagemAgendamento: msg("proximo.encontrado", { quando, data: formatDataCurta(ag.data), horario }),
   };
 }
 
@@ -80,7 +81,7 @@ export function dadosNotasFiscais(notas: NotaFiscalInfo[]): Record<string, unkno
       .join(" · ");
     return lista.length === 1 ? (desc ? `${desc}\n${n.link}` : n.link) : `${i + 1}) ${desc ? `${desc}\n` : ""}${n.link}`;
   });
-  const titulo = lista.length === 1 ? "🧾 Aqui está a sua nota fiscal:" : `🧾 Encontrei ${lista.length} notas fiscais:`;
+  const titulo = lista.length === 1 ? msg("nota.titulo_uma") : msg("nota.titulo_varias", { quantidade: lista.length });
   return {
     possuiNota: true,
     quantidade: lista.length,
@@ -111,7 +112,7 @@ export function dadosBoletos(boletos: BoletoInfo[]): Record<string, unknown> {
     const prefixo = lista.length === 1 ? "" : `${i + 1}) `;
     return `${prefixo}${desc ? `${desc}\n` : ""}${b.link}`;
   });
-  const titulo = lista.length === 1 ? "💳 Você tem 1 boleto em aberto:" : `💳 Você tem ${lista.length} boletos em aberto:`;
+  const titulo = lista.length === 1 ? msg("boletos.titulo_um") : msg("boletos.titulo_varios", { quantidade: lista.length });
   return {
     possuiBoletos: true,
     quantidade: lista.length,
@@ -128,7 +129,7 @@ export const SEM_BOLETOS_DATA = { possuiBoletos: false, quantidade: 0, texto: ""
 /** Situação de um pedido consultado pelo número. */
 export function dadosPedido(p: PedidoInfo): Record<string, unknown> {
   const linhas = [
-    `📦 Pedido ${p.numero}`,
+    msg("pedido.titulo_numero", { numero: p.numero }),
     p.produto && `Produto: ${p.produto}`,
     p.situacao && `Situação: ${p.situacao}`,
     p.dataPedido && `Data do pedido: ${dataLegivel(p.dataPedido)}`,
@@ -153,7 +154,7 @@ export function dadosPedido(p: PedidoInfo): Record<string, unknown> {
 /** Último pedido do cliente, consultado pelo CPF/CNPJ. */
 export function dadosUltimoPedido(p: UltimoPedidoInfo): Record<string, unknown> {
   const linhas = [
-    p.numero ? `📦 Seu último pedido: ${p.numero}` : "📦 Seu último pedido",
+    p.numero ? msg("pedido.titulo_ultimo", { numero: p.numero }) : msg("pedido.titulo_ultimo_sem_numero"),
     p.produto && `Produto: ${p.produto}`,
     p.situacao && `Situação: ${p.situacao}`,
     p.dataAprovacao && `Aprovado em: ${dataLegivel(p.dataAprovacao)}`,
